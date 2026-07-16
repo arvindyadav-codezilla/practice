@@ -41,9 +41,14 @@ export default function GroupChat() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      // Avoid IPv6 resolution issue (localhost resolving to ::1 while backend runs on 127.0.0.1)
-      const hostname = window.location.hostname === "localhost" ? "127.0.0.1" : window.location.hostname;
-      setServerUrl(`${protocol}//${hostname}:8000/ws`);
+      const hostname = window.location.hostname;
+      
+      // If running locally, connect to local backend; otherwise connect to deployed Render backend
+      if (hostname === "localhost" || hostname === "127.0.0.1") {
+        setServerUrl(`${protocol}//127.0.0.1:8000/ws`);
+      } else {
+        setServerUrl("wss://practice-ihvr.onrender.com/ws");
+      }
     }
   }, []);
 
