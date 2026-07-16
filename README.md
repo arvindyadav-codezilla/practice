@@ -13,13 +13,12 @@ Click the button below to deploy the backend WebSocket server directly to Render
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/arvindyadav-codezilla/practice&branch=master)
 
 *   **Note:** During deployment, Render will prompt you for the `GEMINI_API_KEY`. Enter your Gemini API key safely there.
-*   Once deployed, Render will provide a URL (e.g. `https://synapse-chat-backend.onrender.com`). Your WebSocket URL will be `wss://synapse-chat-backend.onrender.com/ws`.
+*   Once deployed, the frontend will automatically connect to your live Render backend without any manual configuration!
 
 ---
 
 ### 2. Deploy the Frontend to Vercel (Free)
 
-1. Import this repository into your Vercel Dashboard.
-2. Set the **Root Directory** to `frontend`.
-3. Deploy!
-4. In the lobby of your live app, click **Advanced Server Settings** and enter your Render WebSocket URL to connect.
+Click the button below to deploy the frontend Next.js application directly to Vercel:
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/arvindyadav-codezilla/practice&root-directory=frontend)
