@@ -7,6 +7,10 @@ import os
 import urllib.request
 import random
 from typing import Dict, Set, List
+from dotenv import load_dotenv
+
+# Load environment variables from .env file (git ignored)
+load_dotenv()
 
 app = FastAPI(title="Group Chat WebSocket Server with AI Agent")
 
