@@ -11,6 +11,23 @@ interface ChatMessage {
   mediaUrl?: string;
 }
 
+interface NewsComment {
+  author: string;
+  text: string;
+  timestamp: string;
+}
+
+interface NewsItem {
+  id: string;
+  title: string;
+  link: string;
+  description: string;
+  imageUrl: string;
+  pubDate: string;
+  likes: number;
+  comments: NewsComment[];
+}
+
 export default function GroupChat() {
   // Connection states
   const [joined, setJoined] = useState(false);
@@ -29,6 +46,13 @@ export default function GroupChat() {
   const [activeTyping, setActiveTyping] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [socketConnected, setSocketConnected] = useState(false);
+
+  // News feed states
+  const [showNews, setShowNews] = useState(true);
+  const [news, setNews] = useState<NewsItem[]>([]);
+  const [activeCommentBox, setActiveCommentBox] = useState<string | null>(null);
+  const [commentInput, setCommentInput] = useState("");
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   const socketRef = useRef<WebSocket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -66,6 +90,87 @@ export default function GroupChat() {
       }
     };
   }, []);
+
+  // Load news when joined or server URL changes
+  useEffect(() => {
+    if (joined) {
+      loadNews();
+    }
+  }, [joined, serverUrl]);
+
+  const getHttpUrl = (path: string) => {
+    try {
+      const url = new URL(serverUrl);
+      const protocol = url.protocol === "wss:" ? "https:" : "http:";
+      return `${protocol}//${url.host}${path}`;
+    } catch {
+      return "";
+    }
+  };
+
+  const loadNews = async () => {
+    const url = getHttpUrl("/api/news");
+    if (!url) return;
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setNews(data);
+      }
+    } catch (err) {
+      console.error("Error loading news:", err);
+    }
+  };
+
+  const handleLikeNews = async (id: string) => {
+    const url = getHttpUrl(`/api/news/${id}/like`);
+    if (!url) return;
+    try {
+      const res = await fetch(url, { method: "POST" });
+      const data = await res.json();
+      if (data.status === "ok") {
+        setNews((prev) =>
+          prev.map((item) => (item.id === id ? { ...item, likes: data.likes } : item))
+        );
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleAddComment = async (e: React.FormEvent, id: string) => {
+    e.preventDefault();
+    const text = commentInput.trim();
+    if (!text) return;
+    const url = getHttpUrl(`/api/news/${id}/comment`);
+    if (!url) return;
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, username }),
+      });
+      const data = await res.json();
+      if (data.status === "ok") {
+        setNews((prev) =>
+          prev.map((item) =>
+            item.id === id
+              ? { ...item, comments: [...item.comments, data.comment] }
+              : item
+          )
+        );
+        setCommentInput("");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleShareNews = (link: string) => {
+    navigator.clipboard.writeText(link);
+    setToastMsg("Link copied to clipboard!");
+    setTimeout(() => setToastMsg(null), 3000);
+  };
 
   // Connect to websocket server
   const handleJoin = (e: React.FormEvent) => {
@@ -453,6 +558,13 @@ export default function GroupChat() {
                   <span>{users.length} users active in room</span>
                 </div>
               </div>
+              <button 
+                className={`news-toggle-btn ${showNews ? "active" : ""}`} 
+                onClick={() => setShowNews(!showNews)}
+                title="Toggle tech news"
+              >
+                📰 {showNews ? "Hide News" : "Show News"}
+              </button>
             </div>
 
             {/* Messages */}
@@ -544,6 +656,83 @@ export default function GroupChat() {
               </div>
             </form>
           </div>
+
+          {/* News Panel */}
+          {showNews && (
+            <div className="chat-news">
+              <div className="news-header">
+                <h3>Trending Tech News</h3>
+                <button className="refresh-news-btn" onClick={loadNews} title="Refresh news">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                  </svg>
+                </button>
+              </div>
+              <div className="news-list">
+                {news.map((item) => (
+                  <div key={item.id} className="news-card">
+                    {item.imageUrl && (
+                      <div className="news-card-image">
+                        <img src={item.imageUrl} alt={item.title} />
+                      </div>
+                    )}
+                    <div className="news-card-content">
+                      <h4 className="news-card-title">
+                        <a href={item.link} target="_blank" rel="noopener noreferrer">
+                          {item.title}
+                        </a>
+                      </h4>
+                      <p className="news-card-desc">{item.description}</p>
+                      
+                      {/* Actions */}
+                      <div className="news-card-actions">
+                        <button className="action-btn like" onClick={() => handleLikeNews(item.id)}>
+                          <span>❤️</span> {item.likes}
+                        </button>
+                        <button className="action-btn comment" onClick={() => setActiveCommentBox(activeCommentBox === item.id ? null : item.id)}>
+                          <span>💬</span> {item.comments.length}
+                        </button>
+                        <button className="action-btn share" onClick={() => handleShareNews(item.link)}>
+                          <span>📤</span> Share
+                        </button>
+                      </div>
+                      
+                      {/* Comments section */}
+                      {activeCommentBox === item.id && (
+                        <div className="news-comments-section">
+                          <div className="comments-list">
+                            {item.comments.map((c, i) => (
+                              <div key={i} className="comment-item">
+                                <span className="comment-author">{c.author}:</span>
+                                <span className="comment-text">{c.text}</span>
+                              </div>
+                            ))}
+                          </div>
+                          <form onSubmit={(e) => handleAddComment(e, item.id)} className="comment-form">
+                            <input
+                              type="text"
+                              placeholder="Write a comment..."
+                              value={commentInput}
+                              onChange={(e) => setCommentInput(e.target.value)}
+                              required
+                            />
+                            <button type="submit">Send</button>
+                          </form>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toastMsg && (
+        <div className="toast-notification">
+          <span>{toastMsg}</span>
         </div>
       )}
     </div>

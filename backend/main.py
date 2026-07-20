@@ -7,6 +7,8 @@ import os
 import urllib.request
 import urllib.parse
 import random
+import re
+import xml.etree.ElementTree as ET
 from typing import Dict, Set, List
 from dotenv import load_dotenv
 
@@ -336,6 +338,122 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception as e:
         print(f"WebSocket exception: {e}")
         await manager.disconnect(websocket)
+
+# RSS news data fetching & endpoints
+cached_news: List[dict] = []
+
+def get_fallback_news():
+    return [
+        {
+            "id": "fallback_1",
+            "title": "Next-Gen AI Models Redefining Real-Time Web Apps",
+            "link": "https://techcrunch.com",
+            "description": "A new generation of small, highly efficient language models is enabling developers to run intelligent agents directly inside browser applications with minimal latency.",
+            "imageUrl": "https://images.unsplash.com/photo-1677442136019-21780efad99a?w=500&auto=format&fit=crop&q=60",
+            "pubDate": "Mon, 20 Jul 2026 12:00:00 GMT",
+            "likes": 12,
+            "comments": []
+        },
+        {
+            "id": "fallback_2",
+            "title": "The Rise of Glassmorphic Interfaces in Modern Web Design",
+            "link": "https://techcrunch.com",
+            "description": "Designers are embracing glassmorphic cards, radial gradients, and subtle glow effects to make interactive interfaces feel premium and immersive.",
+            "imageUrl": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop&q=60",
+            "pubDate": "Mon, 20 Jul 2026 10:30:00 GMT",
+            "likes": 24,
+            "comments": []
+        }
+    ]
+
+def fetch_tech_news():
+    url = "https://techcrunch.com/feed/"
+    try:
+        req = urllib.request.Request(
+            url, 
+            headers={'User-Agent': 'Mozilla/5.0'}
+        )
+        with urllib.request.urlopen(req, timeout=5) as response:
+            xml_data = response.read()
+        
+        root = ET.fromstring(xml_data)
+        news_items = []
+        
+        for item in root.findall('.//item')[:10]:
+            title = item.find('title').text if item.find('title') is not None else ""
+            link = item.find('link').text if item.find('link') is not None else ""
+            
+            desc_element = item.find('description')
+            description = ""
+            if desc_element is not None and desc_element.text:
+                description = re.sub('<[^<]+?>', '', desc_element.text)
+                if len(description) > 150:
+                    description = description[:147] + "..."
+            
+            image_url = ""
+            media_content = item.find('{http://search.yahoo.com/mrss/}content')
+            if media_content is not None:
+                image_url = media_content.attrib.get('url', '')
+            
+            if not image_url and desc_element is not None and desc_element.text:
+                img_match = re.search(r'src="([^"]+)"', desc_element.text)
+                if img_match:
+                    image_url = img_match.group(1)
+            
+            if not image_url:
+                image_url = "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=500&auto=format&fit=crop&q=60"
+                
+            pub_date = item.find('pubDate').text if item.find('pubDate') is not None else ""
+            
+            news_items.append({
+                "id": re.sub(r'\W+', '', title)[:20] + str(random.randint(100, 999)),
+                "title": title,
+                "link": link,
+                "description": description,
+                "imageUrl": image_url,
+                "pubDate": pub_date,
+                "likes": 0,
+                "comments": []
+            })
+            
+        return news_items
+    except Exception as e:
+        print(f"Error fetching RSS news: {e}")
+        return get_fallback_news()
+
+@app.get("/api/news")
+def get_news():
+    global cached_news
+    if not cached_news:
+        cached_news = fetch_tech_news()
+    return cached_news
+
+@app.post("/api/news/{news_id}/like")
+def like_news(news_id: str):
+    global cached_news
+    for item in cached_news:
+        if item["id"] == news_id:
+            item["likes"] += 1
+            return {"status": "ok", "likes": item["likes"]}
+    return {"status": "error", "message": "News item not found"}
+
+@app.post("/api/news/{news_id}/comment")
+def comment_news(news_id: str, payload: dict):
+    global cached_news
+    comment_text = payload.get("text", "").strip()
+    author = payload.get("username", "Anonymous").strip()
+    if not comment_text:
+        return {"status": "error", "message": "Comment text is empty"}
+    for item in cached_news:
+        if item["id"] == news_id:
+            comment = {
+                "author": author,
+                "text": comment_text,
+                "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+            }
+            item["comments"].append(comment)
+            return {"status": "ok", "comment": comment}
+    return {"status": "error", "message": "News item not found"}
 
 @app.get("/")
 def index():
