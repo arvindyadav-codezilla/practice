@@ -47,7 +47,7 @@ export default function GroupChat() {
       if (hostname === "localhost" || hostname === "127.0.0.1") {
         setServerUrl(`${protocol}//127.0.0.1:8000/ws`);
       } else {
-        setServerUrl("wss://practice-ihvr.onrender.com/ws");
+        setServerUrl(process.env.NEXT_PUBLIC_WS_SERVER_URL || "wss://practice-ihvr.onrender.com/ws");
       }
     }
   }, []);
