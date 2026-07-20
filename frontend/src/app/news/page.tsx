@@ -28,6 +28,14 @@ export default function NewsPage() {
   const [serverUrl, setServerUrl] = useState("");
   const [loading, setLoading] = useState(true);
 
+  // Enable document body scrolling on mount, reset to hidden on unmount
+  useEffect(() => {
+    document.body.style.overflow = "auto";
+    return () => {
+      document.body.style.overflow = "hidden";
+    };
+  }, []);
+
   // Initialize the server URL on client-side
   useEffect(() => {
     if (typeof window !== "undefined") {

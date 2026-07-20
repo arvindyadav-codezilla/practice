@@ -368,6 +368,18 @@ def get_fallback_news():
 
 def fetch_tech_news():
     url = "https://techcrunch.com/feed/"
+    tech_images = [
+        "https://images.unsplash.com/photo-1518770660439-4636190af475?w=600&auto=format&fit=crop&q=60", # Microchip
+        "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=60", # Abstract purple
+        "https://images.unsplash.com/photo-1677442136019-21780efad99a?w=600&auto=format&fit=crop&q=60", # AI digital brain
+        "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600&auto=format&fit=crop&q=60", # Cyber security
+        "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=600&auto=format&fit=crop&q=60", # High tech server
+        "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=60", # Globe connectivity
+        "https://images.unsplash.com/photo-1531297484001-80022131f5a1?w=600&auto=format&fit=crop&q=60", # Sleek laptop
+        "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=600&auto=format&fit=crop&q=60", # Developer code
+        "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?w=600&auto=format&fit=crop&q=60", # Tech workspace
+        "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=600&auto=format&fit=crop&q=60", # Futuristic tech room
+    ]
     try:
         req = urllib.request.Request(
             url, 
@@ -379,7 +391,7 @@ def fetch_tech_news():
         root = ET.fromstring(xml_data)
         news_items = []
         
-        for item in root.findall('.//item')[:10]:
+        for idx, item in enumerate(root.findall('.//item')[:12]):
             title = item.find('title').text if item.find('title') is not None else ""
             link = item.find('link').text if item.find('link') is not None else ""
             
@@ -391,17 +403,35 @@ def fetch_tech_news():
                     description = description[:147] + "..."
             
             image_url = ""
+            
+            # 1. Search media content tag
             media_content = item.find('{http://search.yahoo.com/mrss/}content')
             if media_content is not None:
                 image_url = media_content.attrib.get('url', '')
+                
+            # 2. Search media thumbnail tag
+            if not image_url:
+                media_thumb = item.find('{http://search.yahoo.com/mrss/}thumbnail')
+                if media_thumb is not None:
+                    image_url = media_thumb.attrib.get('url', '')
+                    
+            # 3. Search enclosure image tag
+            if not image_url:
+                enclosure = item.find('enclosure')
+                if enclosure is not None:
+                    enc_type = enclosure.attrib.get('type', '')
+                    if 'image' in enc_type:
+                        image_url = enclosure.attrib.get('url', '')
             
+            # 4. Search description image source
             if not image_url and desc_element is not None and desc_element.text:
                 img_match = re.search(r'src="([^"]+)"', desc_element.text)
                 if img_match:
                     image_url = img_match.group(1)
             
+            # 5. Fallback index modulo to guarantee different images
             if not image_url:
-                image_url = "https://images.unsplash.com/photo-1504711434969-e33886168f5c?w=500&auto=format&fit=crop&q=60"
+                image_url = tech_images[idx % len(tech_images)]
                 
             pub_date = item.find('pubDate').text if item.find('pubDate') is not None else ""
             
@@ -412,7 +442,7 @@ def fetch_tech_news():
                 "description": description,
                 "imageUrl": image_url,
                 "pubDate": pub_date,
-                "likes": 0,
+                "likes": random.randint(2, 28),
                 "comments": []
             })
             
