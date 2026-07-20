@@ -5,6 +5,7 @@ import datetime
 import asyncio
 import os
 import urllib.request
+import urllib.parse
 import random
 from typing import Dict, Set, List
 from dotenv import load_dotenv
@@ -39,7 +40,8 @@ def get_smart_fallback_response(prompt: str, history: List[dict]) -> str:
             "- `@nova joke` : Tell an awesome programmer joke.\n"
             "- `@nova quote` : Show an inspiring quote.\n"
             "- `@nova summarize` : Summarize the latest chat history in this room.\n"
-            "- `@nova stats` : Check current chat statistics.\n\n"
+            "- `@nova stats` : Check current chat statistics.\n"
+            "- `@nova draw <prompt>` : Generate a cool AI image for free!\n\n"
             "💡 *Tip: To enable full conversational AI, start the server with the `GEMINI_API_KEY` environment variable.*"
         )
     elif "joke" in prompt_lower:
@@ -227,6 +229,46 @@ class ChatManager:
         # Trigger typing indicator for Nova AI
         await self.send_typing_status(room, "Nova AI ✨", True)
         
+        # Parse for draw/image generation command
+        prompt_clean = prompt.strip()
+        for prefix in ["@nova", "@ai"]:
+            if prompt_clean.lower().startswith(prefix):
+                prompt_clean = prompt_clean[len(prefix):].strip()
+        
+        prompt_clean_lower = prompt_clean.lower()
+        is_draw = False
+        draw_prompt = ""
+        
+        if prompt_clean_lower.startswith("draw ") or prompt_clean_lower.startswith("paint ") or prompt_clean_lower.startswith("generate image of "):
+            is_draw = True
+            if prompt_clean_lower.startswith("draw "):
+                draw_prompt = prompt_clean[len("draw "):].strip()
+            elif prompt_clean_lower.startswith("paint "):
+                draw_prompt = prompt_clean[len("paint "):].strip()
+            else:
+                draw_prompt = prompt_clean[len("generate image of "):].strip()
+
+        if is_draw and draw_prompt:
+            # Generate AI Image using Pollinations.ai (free & no auth)
+            encoded_prompt = urllib.parse.quote(draw_prompt)
+            seed = random.randint(1, 999999)
+            image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=512&height=512&nologo=true&private=true&seed={seed}"
+            
+            # Simulate thinking delay
+            await asyncio.sleep(1.5)
+            await self.send_typing_status(room, "Nova AI ✨", False)
+            
+            ai_msg = {
+                "type": "message",
+                "username": "Nova AI ✨",
+                "text": f"🎨 Here is your generated image for: **\"{draw_prompt}\"**",
+                "mediaUrl": image_url,
+                "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+            }
+            self.save_to_history(room, ai_msg)
+            await self.broadcast_to_room(room, ai_msg)
+            return
+
         # Simulate thinking delay (and API call latency)
         history = self.room_history.get(room, [])
         ai_reply = await generate_ai_response(prompt, history)

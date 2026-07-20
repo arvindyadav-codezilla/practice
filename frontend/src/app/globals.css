@@ -713,6 +713,65 @@ html, body {
   40% { transform: scale(1.0); }
 }
 
+/* AI Image Generation & Media Styles */
+.ai-draw-btn {
+  background: rgba(244, 114, 182, 0.1);
+  border: 1px solid rgba(244, 114, 182, 0.25);
+  color: var(--accent-pink);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ai-draw-btn:hover {
+  background: rgba(244, 114, 182, 0.25);
+  border-color: rgba(244, 114, 182, 0.5);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.message-media {
+  margin-top: 10px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  max-width: 100%;
+  width: 280px;
+  height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  animation: mediaPulse 2s infinite ease-in-out;
+}
+
+.generated-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 12px;
+  display: block;
+  transition: transform 0.3s ease;
+}
+
+.generated-image:hover {
+  transform: scale(1.03);
+  cursor: zoom-in;
+}
+
+@keyframes mediaPulse {
+  0% { background-color: rgba(255, 255, 255, 0.02); }
+  50% { background-color: rgba(255, 255, 255, 0.06); }
+  100% { background-color: rgba(255, 255, 255, 0.02); }
+}
+
 /* Responsive adjustment */
 @media (max-width: 768px) {
   .app-container {

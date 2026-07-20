@@ -8,6 +8,7 @@ interface ChatMessage {
   text?: string;
   content?: string;
   timestamp: string;
+  mediaUrl?: string;
 }
 
 export default function GroupChat() {
@@ -124,6 +125,7 @@ export default function GroupChat() {
               type: "message",
               username: data.username,
               text: data.text,
+              mediaUrl: data.mediaUrl,
               timestamp: data.timestamp,
             },
           ]);
@@ -261,6 +263,18 @@ export default function GroupChat() {
   const insertAITrigger = () => {
     if (!inputText.startsWith("@nova")) {
       setInputText((prev) => "@nova " + prev);
+    }
+  };
+
+  const insertAIDrawTrigger = () => {
+    if (!inputText.startsWith("@nova draw")) {
+      setInputText((prev) => {
+        const trimmed = prev.trim();
+        if (trimmed.startsWith("@nova")) {
+          return "@nova draw " + trimmed.substring(5).trim();
+        }
+        return "@nova draw " + trimmed;
+      });
     }
   };
 
@@ -466,7 +480,19 @@ export default function GroupChat() {
                       </span>
                       <span>{formatTime(msg.timestamp)}</span>
                     </div>
-                    <div className="message-bubble">{renderMessageText(msg.text || "")}</div>
+                    <div className="message-bubble">
+                      {msg.text && renderMessageText(msg.text)}
+                      {msg.mediaUrl && (
+                        <div className="message-media">
+                          <img 
+                            src={msg.mediaUrl} 
+                            alt="AI Generated" 
+                            className="generated-image"
+                            loading="lazy"
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -498,6 +524,9 @@ export default function GroupChat() {
               <div className="input-bar">
                 <button type="button" className="ai-trigger-btn" onClick={insertAITrigger}>
                   <span>✨ Ask AI</span>
+                </button>
+                <button type="button" className="ai-draw-btn" onClick={insertAIDrawTrigger}>
+                  <span>🎨 Draw</span>
                 </button>
                 <input
                   type="text"
