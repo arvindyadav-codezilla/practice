@@ -4,12 +4,18 @@ import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 
 interface ChatMessage {
-  type: "message" | "system";
+  type: "message" | "system" | "poll" | "share_code";
   username?: string;
   text?: string;
   content?: string;
   timestamp: string;
   mediaUrl?: string;
+  pollId?: string;
+  question?: string;
+  options?: { option: string; votes: number }[];
+  voters?: { [user: string]: string };
+  codeLanguage?: string;
+  codeSnippet?: string;
 }
 
 interface NewsComment {
@@ -29,6 +35,1095 @@ interface NewsItem {
   comments: NewsComment[];
 }
 
+const Whiteboard = ({ socket, connected, username }: { socket: WebSocket | null; connected: boolean; username: string }) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const isDrawingRef = useRef(false);
+  const [color, setColor] = useState("#a855f7");
+  const [lineWidth, setLineWidth] = useState(4);
+  const lastPosRef = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const handleRemoteDraw = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      drawOnCanvas(detail.x0, detail.y0, detail.x1, detail.y1, detail.color, detail.width);
+    };
+
+    const handleRemoteClear = () => {
+      clearLocalCanvas();
+    };
+
+    window.addEventListener("whiteboard-draw-event", handleRemoteDraw);
+    window.addEventListener("whiteboard-clear-event", handleRemoteClear);
+
+    return () => {
+      window.removeEventListener("whiteboard-draw-event", handleRemoteDraw);
+      window.removeEventListener("whiteboard-clear-event", handleRemoteClear);
+    };
+  }, []);
+
+  const drawOnCanvas = (x0: number, y0: number, x1: number, y1: number, drawColor: string, drawWidth: number) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.beginPath();
+    ctx.strokeStyle = drawColor;
+    ctx.lineWidth = drawWidth;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    ctx.stroke();
+    ctx.closePath();
+  };
+
+  const clearLocalCanvas = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  };
+
+  const handleClearCanvas = () => {
+    clearLocalCanvas();
+    if (socket && connected) {
+      socket.send(JSON.stringify({ type: "clear_canvas" }));
+    }
+  };
+
+  const getCoordinates = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    
+    if ("touches" in e) {
+      if (e.touches.length === 0) return null;
+      return {
+        x: e.touches[0].clientX - rect.left,
+        y: e.touches[0].clientY - rect.top,
+      };
+    } else {
+      return {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      };
+    }
+  };
+
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const coords = getCoordinates(e);
+    if (!coords) return;
+    isDrawingRef.current = true;
+    lastPosRef.current = coords;
+  };
+
+  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDrawingRef.current) return;
+    const coords = getCoordinates(e);
+    if (!coords) return;
+
+    const x0 = lastPosRef.current.x;
+    const y0 = lastPosRef.current.y;
+    const x1 = coords.x;
+    const y1 = coords.y;
+
+    drawOnCanvas(x0, y0, x1, y1, color, lineWidth);
+
+    if (socket && connected) {
+      socket.send(
+        JSON.stringify({
+          type: "draw",
+          x0,
+          y0,
+          x1,
+          y1,
+          color,
+          width: lineWidth,
+          username,
+        })
+      );
+    }
+
+    lastPosRef.current = coords;
+  };
+
+  const stopDrawing = () => {
+    isDrawingRef.current = false;
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", padding: "20px", gap: "16px", textAlign: "left" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+        <div>
+          <h2 style={{ color: "#fff", margin: 0, fontSize: "20px", fontWeight: 700 }}>Real-time Whiteboard</h2>
+          <p style={{ color: "var(--text-muted)", margin: 0, fontSize: "12px" }}>Draw and brainstorm collaboratively with room members</p>
+        </div>
+        <button onClick={handleClearCanvas} className="news-page-action-btn like" style={{ padding: "8px 16px", border: "1px solid rgba(239, 68, 68, 0.2)", color: "#f87171" }}>
+          🧹 Clear Canvas
+        </button>
+      </div>
+
+      <div style={{ display: "flex", gap: "16px", alignItems: "center", background: "rgba(255,255,255,0.02)", padding: "12px", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.04)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <span style={{ fontSize: "13px", color: "var(--text-main)" }}>Color:</span>
+          <input type="color" value={color} onChange={(e) => setColor(e.target.value)} style={{ border: "none", background: "none", width: "32px", height: "32px", cursor: "pointer" }} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1 }}>
+          <span style={{ fontSize: "13px", color: "var(--text-main)" }}>Width:</span>
+          <input type="range" min="1" max="20" value={lineWidth} onChange={(e) => setLineWidth(Number(e.target.value))} style={{ flex: 1, accentColor: "#a855f7" }} />
+          <span style={{ fontSize: "13px", color: "var(--text-muted)", minWidth: "24px" }}>{lineWidth}px</span>
+        </div>
+      </div>
+
+      <div style={{ flex: 1, position: "relative", background: "#090d16", borderRadius: "16px", border: "1px solid var(--panel-border)", overflow: "hidden", minHeight: "350px" }}>
+        <canvas
+          ref={canvasRef}
+          width={800}
+          height={600}
+          onMouseDown={startDrawing}
+          onMouseMove={draw}
+          onMouseUp={stopDrawing}
+          onMouseLeave={stopDrawing}
+          onTouchStart={startDrawing}
+          onTouchMove={draw}
+          onTouchEnd={stopDrawing}
+          style={{ width: "100%", height: "100%", display: "block", cursor: "crosshair" }}
+        />
+      </div>
+    </div>
+  );
+};
+
+const CodeSandbox = ({ html, css, js, onHtmlChange, onCssChange, onJsChange, onShare }: {
+  html: string;
+  css: string;
+  js: string;
+  onHtmlChange: (val: string) => void;
+  onCssChange: (val: string) => void;
+  onJsChange: (val: string) => void;
+  onShare: () => void;
+}) => {
+  const [view, setView] = useState<"editor" | "preview">("editor");
+  const [activeLang, setActiveLang] = useState<"html" | "css" | "js">("html");
+
+  const generateSource = () => {
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <style>${css}</style>
+        </head>
+        <body>
+          ${html}
+          <script>${js}</script>
+        </body>
+      </html>
+    `;
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", padding: "20px", gap: "16px", textAlign: "left" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+        <div>
+          <h2 style={{ color: "#fff", margin: 0, fontSize: "20px", fontWeight: 700 }}>Code Sandbox Playground</h2>
+          <p style={{ color: "var(--text-muted)", margin: 0, fontSize: "12px" }}>Write frontend snippets and share them directly into the chat</p>
+        </div>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button onClick={onShare} className="back-to-chat-btn" style={{ background: "var(--primary-gradient)", border: "none", boxShadow: "0 4px 12px var(--primary-glow)", fontSize: "12px", padding: "8px 16px" }}>
+            🚀 Share to Chat
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: "8px", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: "12px" }}>
+        <button onClick={() => setView("editor")} style={{ background: view === "editor" ? "rgba(255,255,255,0.06)" : "none", border: "none", color: "#fff", borderRadius: "8px", padding: "6px 12px", cursor: "pointer", fontSize: "13px" }}>
+          📝 Editor
+        </button>
+        <button onClick={() => setView("preview")} style={{ background: view === "preview" ? "rgba(255,255,255,0.06)" : "none", border: "none", color: "#fff", borderRadius: "8px", padding: "6px 12px", cursor: "pointer", fontSize: "13px" }}>
+          👁️ Live Preview
+        </button>
+      </div>
+
+      {view === "editor" ? (
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, gap: "12px", minHeight: "350px" }}>
+          <div style={{ display: "flex", gap: "4px" }}>
+            {(["html", "css", "js"] as const).map((lang) => (
+              <button
+                key={lang}
+                onClick={() => setActiveLang(lang)}
+                style={{
+                  background: activeLang === lang ? "rgba(168, 85, 247, 0.15)" : "none",
+                  border: activeLang === lang ? "1px solid var(--primary)" : "1px solid transparent",
+                  color: activeLang === lang ? "var(--primary)" : "var(--text-muted)",
+                  borderRadius: "6px",
+                  padding: "6px 12px",
+                  cursor: "pointer",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  textTransform: "uppercase"
+                }}
+              >
+                {lang}
+              </button>
+            ))}
+          </div>
+
+          <textarea
+            value={activeLang === "html" ? html : activeLang === "css" ? css : js}
+            onChange={(e) => {
+              if (activeLang === "html") onHtmlChange(e.target.value);
+              else if (activeLang === "css") onCssChange(e.target.value);
+              else onJsChange(e.target.value);
+            }}
+            style={{
+              flex: 1,
+              background: "#090d16",
+              border: "1px solid var(--panel-border)",
+              borderRadius: "12px",
+              padding: "16px",
+              color: "#38bdf8",
+              fontFamily: "monospace",
+              fontSize: "13px",
+              lineHeight: "1.6",
+              outline: "none",
+              resize: "none"
+            }}
+            placeholder={`Type your ${activeLang.toUpperCase()} code here...`}
+          />
+        </div>
+      ) : (
+        <div style={{ flex: 1, background: "#fff", borderRadius: "12px", border: "1px solid var(--panel-border)", overflow: "hidden", minHeight: "350px" }}>
+          <iframe
+            srcDoc={generateSource()}
+            title="Sandbox Live Preview"
+            sandbox="allow-scripts"
+            style={{ width: "100%", height: "100%", border: "none" }}
+          />
+        </div>
+      )}
+    </div>
+  );
+};
+
+const SynthLoops = ({ socket, connected, username, initialGrid }: { socket: WebSocket | null; connected: boolean; username: string; initialGrid?: number[][] }) => {
+  const [grid, setGrid] = useState<number[][]>(initialGrid || Array(8).fill(null).map(() => Array(8).fill(0)));
+  const [currentStep, setCurrentStep] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const stepTimerRef = useRef<any>(null);
+
+  // Setup sound synthesizer notes
+  const notes = [1046.50, 880.00, 783.99, 659.25, 587.33, 523.25]; // C6, A5, G5, E5, D5, C5
+
+  useEffect(() => {
+    const handleEvent = (e: Event) => {
+      const data = (e as CustomEvent).detail;
+      if (data.type === "synth_update") {
+        setGrid(prev => {
+          const next = prev.map(row => [...row]);
+          next[data.row][data.col] = data.state;
+          return next;
+        });
+      } else if (data.type === "games_sync" && data.synth) {
+        setGrid(data.synth);
+      }
+    };
+    window.addEventListener("playground-event", handleEvent);
+    return () => window.removeEventListener("playground-event", handleEvent);
+  }, []);
+
+  const toggleCell = (row: number, col: number) => {
+    if (socket && connected) {
+      socket.send(JSON.stringify({ type: "synth_toggle", row, col }));
+    }
+  };
+
+  const playNote = (frequency: number, type: OscillatorType, duration: number) => {
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = audioContextRef.current;
+      if (ctx.state === "suspended") {
+        ctx.resume();
+      }
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      
+      osc.type = type;
+      osc.frequency.setValueAtTime(frequency, ctx.currentTime);
+      
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+      
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      
+      osc.start();
+      osc.stop(ctx.currentTime + duration);
+    } catch (e) {
+      console.warn("Audio Context init blocked or failed: ", e);
+    }
+  };
+
+  const playDrum = (isSnare: boolean) => {
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = audioContextRef.current;
+      if (ctx.state === "suspended") {
+        ctx.resume();
+      }
+      
+      if (!isSnare) {
+        // Kick Drum
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.setValueAtTime(150, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.3);
+      } else {
+        // Snare Drum (White Noise + Bandpass Filter)
+        const bufferSize = ctx.sampleRate * 0.2;
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+        
+        const noise = ctx.createBufferSource();
+        noise.buffer = buffer;
+        
+        const filter = ctx.createBiquadFilter();
+        filter.type = "bandpass";
+        filter.frequency.value = 1000;
+        
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+        
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        
+        noise.start();
+        noise.stop(ctx.currentTime + 0.2);
+      }
+    } catch (e) {
+      console.warn("Audio Context init blocked or failed: ", e);
+    }
+  };
+
+  useEffect(() => {
+    if (isPlaying) {
+      const stepInterval = 250; // ms per step (120 BPM)
+      stepTimerRef.current = setInterval(() => {
+        setCurrentStep(prev => {
+          const next = (prev + 1) % 8;
+          // Play any active notes on this step
+          for (let row = 0; row < 8; row++) {
+            if (grid[row][next] === 1) {
+              if (row < 6) {
+                playNote(notes[row], "sine", 0.25);
+              } else if (row === 6) {
+                playDrum(false); // Kick
+              } else if (row === 7) {
+                playDrum(true); // Snare
+              }
+            }
+          }
+          return next;
+        });
+      }, stepInterval);
+    } else {
+      if (stepTimerRef.current) clearInterval(stepTimerRef.current);
+    }
+    return () => {
+      if (stepTimerRef.current) clearInterval(stepTimerRef.current);
+    };
+  }, [isPlaying, grid]);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px", height: "100%", padding: "20px", overflowY: "auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <h3 style={{ margin: 0, color: "#fff", fontSize: "18px", fontWeight: 700 }}>🎵 Synth Sequencer</h3>
+          <p style={{ margin: "4px 0 0 0", color: "var(--text-muted)", fontSize: "12px" }}>Toggle cells to co-create loops with other room members in real-time!</p>
+        </div>
+        <button
+          onClick={() => setIsPlaying(!isPlaying)}
+          style={{
+            background: isPlaying ? "#ef4444" : "var(--primary-gradient)",
+            border: "none",
+            borderRadius: "8px",
+            color: "#fff",
+            fontWeight: 600,
+            padding: "8px 16px",
+            cursor: "pointer"
+          }}
+        >
+          {isPlaying ? "⏹ Stop Sequencer" : "▶ Start Sequencer"}
+        </button>
+      </div>
+
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: "100px 1fr",
+        gap: "12px",
+        background: "rgba(255,255,255,0.02)",
+        padding: "16px",
+        borderRadius: "12px",
+        border: "1px solid rgba(255,255,255,0.06)",
+        overflowX: "auto"
+      }}>
+        {/* Labels Column */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", justifyContent: "space-around" }}>
+          {["Synth C6", "Synth A5", "Synth G5", "Synth E5", "Synth D5", "Synth C5", "Kick Drum", "Snare Drum"].map((lbl, idx) => (
+            <div key={idx} style={{ color: "var(--text-muted)", fontSize: "11px", fontWeight: 600, height: "35px", display: "flex", alignItems: "center" }}>
+              {lbl}
+            </div>
+          ))}
+        </div>
+
+        {/* Matrix Grid */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px", minWidth: "350px" }}>
+          {grid.map((row, rowIdx) => (
+            <div key={rowIdx} style={{ display: "flex", gap: "8px" }}>
+              {row.map((cell, colIdx) => {
+                const isActive = cell === 1;
+                const isCurrent = currentStep === colIdx && isPlaying;
+                return (
+                  <button
+                    key={colIdx}
+                    onClick={() => toggleCell(rowIdx, colIdx)}
+                    style={{
+                      flex: 1,
+                      height: "35px",
+                      background: isActive 
+                        ? (rowIdx < 6 ? "var(--primary-gradient)" : "linear-gradient(135deg, #3b82f6, #1d4ed8)") 
+                        : isCurrent 
+                          ? "rgba(255,255,255,0.12)" 
+                          : "rgba(255,255,255,0.03)",
+                      border: isCurrent 
+                        ? "1px solid #fff" 
+                        : isActive 
+                          ? "none" 
+                          : "1px solid rgba(255,255,255,0.06)",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                      boxShadow: isActive ? "0 0 10px rgba(168, 85, 247, 0.4)" : "none",
+                      transition: "all 0.15s ease"
+                    }}
+                  />
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const CodeRacer = ({ socket, connected, username }: { socket: WebSocket | null; connected: boolean; username: string }) => {
+  const [snippet, setSnippet] = useState("");
+  const [inputVal, setInputVal] = useState("");
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [startTime, setStartTime] = useState<number | null>(null);
+  const [progressMap, setProgressMap] = useState<Record<string, { percent: number; wpm: number }>>({});
+  const [leaderboard, setLeaderboard] = useState<any[]>([]);
+
+  useEffect(() => {
+    const handleEvent = (e: Event) => {
+      const data = (e as CustomEvent).detail;
+      if (data.type === "racer_init") {
+        setSnippet(data.snippet);
+        setInputVal("");
+        setIsPlaying(true);
+        setStartTime(Date.now());
+        setProgressMap({});
+        setLeaderboard([]);
+      } else if (data.type === "racer_update") {
+        setProgressMap(data.progress);
+      } else if (data.type === "racer_leaderboard") {
+        setLeaderboard(data.finished);
+      } else if (data.type === "games_sync" && data.racer_snippet) {
+        setSnippet(data.racer_snippet);
+      }
+    };
+    window.addEventListener("playground-event", handleEvent);
+    return () => window.removeEventListener("playground-event", handleEvent);
+  }, []);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setInputVal(val);
+
+    if (!isPlaying || !startTime) return;
+
+    // Calculate progress
+    let correctChars = 0;
+    for (let i = 0; i < val.length; i++) {
+      if (val[i] === snippet[i]) {
+        correctChars++;
+      } else {
+        break;
+      }
+    }
+
+    const percent = Math.round((correctChars / snippet.length) * 100);
+    const elapsedMinutes = (Date.now() - startTime) / 60000;
+    const wpm = elapsedMinutes > 0 ? Math.round((correctChars / 5) / elapsedMinutes) : 0;
+
+    // Send progress
+    if (socket && connected) {
+      socket.send(JSON.stringify({ type: "racer_progress", progress: percent, wpm }));
+
+      // Check if finished
+      if (correctChars === snippet.length && val.length === snippet.length) {
+        setIsPlaying(false);
+        const finalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+        socket.send(JSON.stringify({ type: "racer_finished", wpm, time: parseFloat(finalTime) }));
+      }
+    }
+  };
+
+  const startRace = () => {
+    if (socket && connected) {
+      socket.send(JSON.stringify({ type: "racer_start" }));
+    }
+  };
+
+  const renderSnippet = () => {
+    return snippet.split("").map((char, idx) => {
+      let color = "var(--text-muted)";
+      let background = "transparent";
+      if (idx < inputVal.length) {
+        if (inputVal[idx] === char) {
+          color = "#10b981";
+        } else {
+          color = "#ef4444";
+          background = "rgba(239, 68, 68, 0.15)";
+        }
+      }
+      return (
+        <span key={idx} style={{ color, background, fontFamily: "monospace", whiteSpace: "pre-wrap" }}>
+          {char}
+        </span>
+      );
+    });
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px", height: "100%", padding: "20px", overflowY: "auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <h3 style={{ margin: 0, color: "#fff", fontSize: "18px", fontWeight: 700 }}>🏎️ Code Racer</h3>
+          <p style={{ margin: "4px 0 0 0", color: "var(--text-muted)", fontSize: "12px" }}>Race to type the code block correctly. WPM updates in real-time!</p>
+        </div>
+        {!isPlaying && (
+          <button
+            onClick={startRace}
+            style={{
+              background: "var(--primary-gradient)",
+              border: "none",
+              borderRadius: "8px",
+              color: "#fff",
+              fontWeight: 600,
+              padding: "8px 16px",
+              cursor: "pointer"
+            }}
+          >
+            🏁 Start New Race
+          </button>
+        )}
+      </div>
+
+      {snippet ? (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "20px" }}>
+          {/* Typing Area */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div style={{
+              background: "#090d16",
+              padding: "16px",
+              borderRadius: "12px",
+              border: "1px solid rgba(255,255,255,0.06)",
+              minHeight: "150px",
+              fontFamily: "monospace",
+              fontSize: "14px",
+              lineHeight: "1.6",
+              whiteSpace: "pre-wrap"
+            }}>
+              {renderSnippet()}
+            </div>
+
+            <textarea
+              value={inputVal}
+              onChange={handleInputChange}
+              disabled={!isPlaying}
+              placeholder={isPlaying ? "Type the code snippet above exactly as shown..." : "Click Start New Race to begin!"}
+              style={{
+                width: "100%",
+                height: "120px",
+                background: "rgba(255,255,255,0.03)",
+                border: "1px solid rgba(255,255,255,0.06)",
+                borderRadius: "12px",
+                padding: "12px",
+                color: "#fff",
+                fontSize: "14px",
+                fontFamily: "monospace",
+                resize: "none",
+                outline: "none"
+              }}
+            />
+          </div>
+
+          {/* Race Tracks & Live Stats */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div className="glass-card" style={{ padding: "16px", background: "rgba(255,255,255,0.02)" }}>
+              <h4 style={{ margin: "0 0 12px 0", color: "#fff", fontSize: "14px", fontWeight: 600 }}>Live Competitors</h4>
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                {Object.entries(progressMap).map(([user, data]) => (
+                  <div key={user} style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--text-muted)" }}>
+                      <span>{user}</span>
+                      <span>{data.wpm} WPM ({data.percent}%)</span>
+                    </div>
+                    <div style={{ height: "6px", background: "rgba(255,255,255,0.05)", borderRadius: "3px", overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${data.percent}%`, background: "var(--primary-gradient)", transition: "width 0.2s" }} />
+                    </div>
+                  </div>
+                ))}
+                {Object.keys(progressMap).length === 0 && (
+                  <span style={{ fontSize: "12px", color: "var(--text-dim)" }}>No active racers.</span>
+                )}
+              </div>
+            </div>
+
+            {leaderboard.length > 0 && (
+              <div className="glass-card" style={{ padding: "16px", border: "1px solid rgba(16, 185, 129, 0.2)" }}>
+                <h4 style={{ margin: "0 0 12px 0", color: "#10b981", fontSize: "14px", fontWeight: 600 }}>Leaderboard Results</h4>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {leaderboard.map((res, idx) => (
+                    <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "#fff" }}>
+                      <span>{idx + 1}. {res.username}</span>
+                      <span style={{ fontWeight: 600 }}>{res.wpm} WPM ({res.time}s)</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div style={{ textAlign: "center", padding: "40px", color: "var(--text-dim)" }}>
+          No active race. Click the button to start!
+        </div>
+      )}
+    </div>
+  );
+};
+
+const TriviaDuel = ({ socket, connected, username }: { socket: WebSocket | null; connected: boolean; username: string }) => {
+  const [gameState, setGameState] = useState<"lobby" | "question" | "results">("lobby");
+  const [question, setQuestion] = useState("");
+  const [options, setOptions] = useState<string[]>([]);
+  const [qIndex, setQIndex] = useState(0);
+  const [totalQ, setTotalQ] = useState(5);
+  const [timeLeft, setTimeLeft] = useState(15);
+  const [selectedOpt, setSelectedOpt] = useState<number | null>(null);
+  const [correctIdx, setCorrectIdx] = useState<number | null>(null);
+  const [scores, setScores] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    const handleEvent = (e: Event) => {
+      const data = (e as CustomEvent).detail;
+      if (data.type === "trivia_next") {
+        setGameState("question");
+        setQuestion(data.question);
+        setOptions(data.options);
+        setQIndex(data.index);
+        setTotalQ(data.total);
+        setTimeLeft(15);
+        setSelectedOpt(null);
+        setCorrectIdx(null);
+      } else if (data.type === "trivia_reveal") {
+        setCorrectIdx(data.correctIndex);
+        setScores(data.scores);
+      } else if (data.type === "trivia_end") {
+        setGameState("results");
+        setScores(data.scores);
+      }
+    };
+    window.addEventListener("playground-event", handleEvent);
+    return () => window.removeEventListener("playground-event", handleEvent);
+  }, []);
+
+  useEffect(() => {
+    if (gameState === "question" && timeLeft > 0 && correctIdx === null) {
+      const t = setTimeout(() => {
+        setTimeLeft(prev => {
+          if (prev <= 1) {
+            if (socket && connected && qIndex === 0) {
+              socket.send(JSON.stringify({ type: "trivia_reveal_request" }));
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearTimeout(t);
+    }
+  }, [gameState, timeLeft, correctIdx]);
+
+  const startQuiz = () => {
+    if (socket && connected) {
+      socket.send(JSON.stringify({ type: "trivia_start" }));
+    }
+  };
+
+  const submitAnswer = (optIdx: number) => {
+    if (selectedOpt !== null || correctIdx !== null) return;
+    setSelectedOpt(optIdx);
+    const timeTaken = 15 - timeLeft;
+    if (socket && connected) {
+      socket.send(JSON.stringify({
+        type: "trivia_submit",
+        index: qIndex,
+        optionIndex: optIdx,
+        timeTaken
+      }));
+    }
+  };
+
+  const nextQuestion = () => {
+    if (socket && connected) {
+      socket.send(JSON.stringify({ type: "trivia_next_request" }));
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px", height: "100%", padding: "20px", overflowY: "auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <h3 style={{ margin: 0, color: "#fff", fontSize: "18px", fontWeight: 700 }}>🧠 AI Tech Trivia</h3>
+          <p style={{ margin: "4px 0 0 0", color: "var(--text-muted)", fontSize: "12px" }}>Race to answer technical coding quiz questions correct and fast!</p>
+        </div>
+        {gameState === "lobby" && (
+          <button
+            onClick={startQuiz}
+            style={{
+              background: "var(--primary-gradient)",
+              border: "none",
+              borderRadius: "8px",
+              color: "#fff",
+              fontWeight: 600,
+              padding: "8px 16px",
+              cursor: "pointer"
+            }}
+          >
+            ⚡ Start Trivia Battle
+          </button>
+        )}
+      </div>
+
+      {gameState === "question" && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "20px" }}>
+          {/* Question Grid */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              fontSize: "13px",
+              color: "var(--text-muted)"
+            }}>
+              <span>Question {qIndex + 1} of {totalQ}</span>
+              <span style={{
+                color: timeLeft > 5 ? "#a855f7" : "#ef4444",
+                fontWeight: 700,
+                fontSize: "16px"
+              }}>
+                ⏱ {timeLeft}s
+              </span>
+            </div>
+
+            <div style={{
+              background: "rgba(255, 255, 255, 0.02)",
+              padding: "24px",
+              borderRadius: "12px",
+              border: "1px solid rgba(255, 255, 255, 0.06)",
+              color: "#fff",
+              fontSize: "18px",
+              fontWeight: 600,
+              lineHeight: "1.4"
+            }}>
+              {question}
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {options.map((opt, idx) => {
+                const isSelected = selectedOpt === idx;
+                const isCorrect = correctIdx === idx;
+                const isWrong = correctIdx !== null && isSelected && !isCorrect;
+
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => submitAnswer(idx)}
+                    disabled={selectedOpt !== null || correctIdx !== null}
+                    style={{
+                      width: "100%",
+                      padding: "16px",
+                      borderRadius: "10px",
+                      textAlign: "left",
+                      fontSize: "14px",
+                      fontWeight: 500,
+                      cursor: "pointer",
+                      background: isCorrect 
+                        ? "#10b981" 
+                        : isWrong 
+                          ? "#ef4444" 
+                          : isSelected 
+                            ? "var(--primary-gradient)" 
+                            : "rgba(255,255,255,0.03)",
+                      border: isCorrect || isWrong || isSelected 
+                        ? "none" 
+                        : "1px solid rgba(255,255,255,0.06)",
+                      color: isCorrect || isWrong || isSelected ? "#fff" : "var(--text-muted)",
+                      transition: "all 0.2s"
+                    }}
+                  >
+                    {opt}
+                  </button>
+                );
+              })}
+            </div>
+
+            {correctIdx !== null && (
+              <button
+                onClick={nextQuestion}
+                style={{
+                  background: "var(--primary-gradient)",
+                  border: "none",
+                  borderRadius: "8px",
+                  color: "#fff",
+                  fontWeight: 600,
+                  padding: "10px 20px",
+                  cursor: "pointer",
+                  alignSelf: "flex-end"
+                }}
+              >
+                {qIndex + 1 === totalQ ? "Finish Battle" : "Next Question ➔"}
+              </button>
+            )}
+          </div>
+
+          {/* Scores Panel */}
+          <div className="glass-card" style={{ padding: "20px", background: "rgba(255, 255, 255, 0.02)" }}>
+            <h4 style={{ margin: "0 0 16px 0", color: "#fff", fontSize: "14px", fontWeight: 700 }}>Battle Scores</h4>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              {Object.entries(scores).sort((a, b) => b[1] - a[1]).map(([user, score], idx) => (
+                <div key={user} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "13px", color: "#fff" }}>
+                    {idx === 0 ? "👑 " : ""}{user}
+                  </span>
+                  <span style={{ fontWeight: 600, color: "var(--primary)" }}>{score} pts</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {gameState === "results" && (
+        <div style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: "24px",
+          padding: "40px 0"
+        }}>
+          <h2 style={{ color: "#fff", margin: 0, fontSize: "28px", fontWeight: 800 }}>🏆 Final Podium</h2>
+          <div style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "12px",
+            width: "100%",
+            maxWidth: "400px"
+          }}>
+            {Object.entries(scores).sort((a, b) => b[1] - a[1]).map(([user, score], idx) => (
+              <div
+                key={user}
+                className="glass-card"
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "16px 20px",
+                  border: idx === 0 ? "1px solid var(--primary)" : "1px solid rgba(255,255,255,0.06)"
+                }}
+              >
+                <span style={{ fontSize: "15px", fontWeight: 600, color: "#fff" }}>
+                  {idx === 0 ? "🥇 " : idx === 1 ? "🥈 " : idx === 2 ? "🥉 " : ""}{user}
+                </span>
+                <span style={{ fontWeight: 700, color: "var(--primary)" }}>{score} pts</span>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={() => setGameState("lobby")}
+            style={{
+              background: "rgba(255,255,255,0.03)",
+              border: "1px solid rgba(255,255,255,0.06)",
+              borderRadius: "8px",
+              color: "#fff",
+              fontWeight: 600,
+              padding: "10px 20px",
+              cursor: "pointer",
+              marginTop: "16px"
+            }}
+          >
+            Back to Lobby
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const Playground = ({ socket, connected, username }: { socket: WebSocket | null; connected: boolean; username: string }) => {
+  const [activeGame, setActiveGame] = useState<"lobby" | "racer" | "trivia" | "synth">("lobby");
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", width: "100%", overflowY: "auto" }}>
+      {activeGame !== "lobby" && (
+        <button
+          onClick={() => setActiveGame("lobby")}
+          style={{
+            background: "none",
+            border: "none",
+            color: "var(--primary)",
+            fontWeight: 600,
+            fontSize: "12px",
+            cursor: "pointer",
+            padding: "20px 20px 0",
+            width: "fit-content"
+          }}
+        >
+          🡨 Back to Playground Lobby
+        </button>
+      )}
+
+      {activeGame === "lobby" ? (
+        <div style={{ padding: "30px", display: "flex", flexDirection: "column", gap: "24px" }}>
+          <div>
+            <h2 style={{ margin: 0, color: "#fff", fontSize: "24px", fontWeight: 800 }}>🎮 Synapse Playground</h2>
+            <p style={{ margin: "4px 0 0 0", color: "var(--text-muted)", fontSize: "14px" }}>Choose an interactive real-time multiplayer game to play with room members!</p>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "20px" }}>
+            {/* Code Racer Card */}
+            <div
+              onClick={() => setActiveGame("racer")}
+              className="glass-card"
+              style={{
+                padding: "24px",
+                cursor: "pointer",
+                transition: "all 0.3s ease",
+                border: "1px solid rgba(168, 85, 247, 0.15)",
+                background: "linear-gradient(135deg, rgba(168, 85, 247, 0.03), rgba(255, 255, 255, 0.01))"
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = "var(--primary)";
+                e.currentTarget.style.transform = "translateY(-4px)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.15)";
+                e.currentTarget.style.transform = "translateY(0)";
+              }}
+            >
+              <div style={{ fontSize: "36px", marginBottom: "16px" }}>🏎️</div>
+              <h3 style={{ margin: "0 0 8px 0", color: "#fff", fontSize: "18px", fontWeight: 700 }}>Code Racer</h3>
+              <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "13px", lineHeight: "1.5" }}>
+                Race against other users in the room to type standard code snippets. Shows real-time progress tracks and WPM rankings!
+              </p>
+            </div>
+
+            {/* AI Trivia Duel Card */}
+            <div
+              onClick={() => setActiveGame("trivia")}
+              className="glass-card"
+              style={{
+                padding: "24px",
+                cursor: "pointer",
+                transition: "all 0.3s ease",
+                border: "1px solid rgba(59, 130, 246, 0.15)",
+                background: "linear-gradient(135deg, rgba(59, 130, 246, 0.03), rgba(255, 255, 255, 0.01))"
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = "#3b82f6";
+                e.currentTarget.style.transform = "translateY(-4px)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.15)";
+                e.currentTarget.style.transform = "translateY(0)";
+              }}
+            >
+              <div style={{ fontSize: "36px", marginBottom: "16px" }}>🧠</div>
+              <h3 style={{ margin: "0 0 8px 0", color: "#fff", fontSize: "18px", fontWeight: 700 }}>AI Tech Trivia</h3>
+              <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "13px", lineHeight: "1.5" }}>
+                Compete in rapid multiple-choice trivia challenges covering JavaScript, system design, and complexity logic.
+              </p>
+            </div>
+
+            {/* Synth Loops Card */}
+            <div
+              onClick={() => setActiveGame("synth")}
+              className="glass-card"
+              style={{
+                padding: "24px",
+                cursor: "pointer",
+                transition: "all 0.3s ease",
+                border: "1px solid rgba(16, 185, 129, 0.15)",
+                background: "linear-gradient(135deg, rgba(16, 185, 129, 0.03), rgba(255, 255, 255, 0.01))"
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = "#10b981";
+                e.currentTarget.style.transform = "translateY(-4px)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = "rgba(16, 185, 129, 0.15)";
+                e.currentTarget.style.transform = "translateY(0)";
+              }}
+            >
+              <div style={{ fontSize: "36px", marginBottom: "16px" }}>🎵</div>
+              <h3 style={{ margin: "0 0 8px 0", color: "#fff", fontSize: "18px", fontWeight: 700 }}>Synth Loop Sequencer</h3>
+              <p style={{ margin: 0, color: "var(--text-muted)", fontSize: "13px", lineHeight: "1.5" }}>
+                Co-create rhythmic sound patterns on a collaborative 8-step matrix. Changes synchronize instantly for all room listeners!
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : activeGame === "racer" ? (
+        <CodeRacer socket={socket} connected={connected} username={username} />
+      ) : activeGame === "trivia" ? (
+        <TriviaDuel socket={socket} connected={connected} username={username} />
+      ) : (
+        <SynthLoops socket={socket} connected={connected} username={username} />
+      )}
+    </div>
+  );
+};
+
 export default function GroupChat() {
   // Connection states
   const [joined, setJoined] = useState(false);
@@ -47,6 +1142,17 @@ export default function GroupChat() {
   const [activeTyping, setActiveTyping] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [socketConnected, setSocketConnected] = useState(false);
+  const [activeTab, setActiveTab] = useState<"chat" | "whiteboard" | "sandbox" | "playground">("chat");
+
+  // Interactive Poll Builder states
+  const [showCreatePoll, setShowCreatePoll] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
+
+  // Code Sandbox states
+  const [htmlCode, setHtmlCode] = useState("<h3>Welcome to Synapse Sandbox!</h3>\n<p>Edit HTML, CSS, or JS and run it instantly.</p>\n<button id='action-btn'>Click Me</button>");
+  const [cssCode, setCssCode] = useState("body {\n  font-family: sans-serif;\n  color: #3b82f6;\n  background: #0f172a;\n  text-align: center;\n  padding-top: 20px;\n}\nbutton {\n  background: linear-gradient(135deg, #a855f7, #3b82f6);\n  color: white;\n  border: none;\n  padding: 8px 16px;\n  border-radius: 6px;\n  cursor: pointer;\n}");
+  const [jsCode, setJsCode] = useState("document.getElementById('action-btn').addEventListener('click', () => {\n  alert('Hello from the Sandbox!');\n});");
 
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -161,6 +1267,47 @@ export default function GroupChat() {
               timestamp: data.timestamp,
             },
           ]);
+        } else if (data.type === "poll") {
+          setMessages((prev) => [
+            ...prev,
+            {
+              type: "poll",
+              username: data.username,
+              pollId: data.pollId,
+              question: data.question,
+              options: data.options,
+              voters: data.voters || {},
+              timestamp: data.timestamp,
+            },
+          ]);
+        } else if (data.type === "poll_update") {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.type === "poll" && msg.pollId === data.pollId
+                ? { ...msg, options: data.options, voters: data.voters || {} }
+                : msg
+            )
+          );
+        } else if (data.type === "share_code") {
+          setMessages((prev) => [
+            ...prev,
+            {
+              type: "share_code",
+              username: data.username,
+              codeLanguage: data.codeLanguage,
+              codeSnippet: data.codeSnippet,
+              timestamp: data.timestamp,
+            },
+          ]);
+        } else if (data.type === "draw" || data.type === "clear_canvas") {
+          if (typeof window !== "undefined") {
+            const eventName = data.type === "draw" ? "whiteboard-draw-event" : "whiteboard-clear-event";
+            window.dispatchEvent(new CustomEvent(eventName, { detail: data }));
+          }
+        } else if (data.type === "racer_init" || data.type === "racer_update" || data.type === "racer_leaderboard" || data.type === "trivia_next" || data.type === "trivia_reveal" || data.type === "trivia_end" || data.type === "synth_update" || data.type === "games_sync") {
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("playground-event", { detail: data }));
+          }
         } else if (data.type === "typing") {
           if (data.isTyping) {
             setActiveTyping(data.username);
@@ -196,6 +1343,75 @@ export default function GroupChat() {
     setJoined(false);
     setMessages([]);
     setUsers([]);
+  };
+
+  const castVote = (pollId: string, option: string) => {
+    if (socketRef.current && socketConnected) {
+      socketRef.current.send(
+        JSON.stringify({
+          type: "vote",
+          pollId,
+          option,
+        })
+      );
+    }
+  };
+
+  const submitPoll = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanQuestion = pollQuestion.trim();
+    const cleanOptions = pollOptions.map((opt) => opt.trim()).filter((opt) => opt !== "");
+    if (!cleanQuestion || cleanOptions.length < 2) return;
+
+    if (socketRef.current && socketConnected) {
+      const pollId = "poll_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5);
+      socketRef.current.send(
+        JSON.stringify({
+          type: "poll",
+          pollId,
+          question: cleanQuestion,
+          options: cleanOptions,
+        })
+      );
+      setPollQuestion("");
+      setPollOptions(["", ""]);
+      setShowCreatePoll(false);
+    }
+  };
+
+  const shareCodeToChat = () => {
+    if (socketRef.current && socketConnected) {
+      const fullCode = `<!-- HTML -->\n${htmlCode}\n\n/* CSS */\n${cssCode}\n\n// JS\n${jsCode}`;
+      socketRef.current.send(
+        JSON.stringify({
+          type: "share_code",
+          codeLanguage: "html",
+          codeSnippet: fullCode,
+        })
+      );
+      setActiveTab("chat");
+    }
+  };
+
+  const loadSharedCodeIntoSandbox = (fullCode: string) => {
+    try {
+      const htmlPart = fullCode.match(/<!-- HTML -->\n([\s\S]*?)(?=\n\/\* CSS \*\/|$)/);
+      const cssPart = fullCode.match(/\/\* CSS \*\/\n([\s\S]*?)(?=\n\/\/ JS|$)/);
+      const jsPart = fullCode.match(/\/\/ JS\n([\s\S]*?)$/);
+      
+      if (htmlPart) setHtmlCode(htmlPart[1].trim());
+      if (cssPart) setCssCode(cssPart[1].trim());
+      if (jsPart) setJsCode(jsPart[1].trim());
+      
+      if (!htmlPart && !cssPart && !jsPart) {
+        setHtmlCode(fullCode);
+        setCssCode("");
+        setJsCode("");
+      }
+    } catch {
+      setHtmlCode(fullCode);
+    }
+    setActiveTab("sandbox");
   };
 
   const handleSendMessage = (e: React.FormEvent) => {
@@ -433,6 +1649,31 @@ export default function GroupChat() {
               </Link>
             </div>
 
+            {/* Sidebar Navigation Tabs */}
+            <div style={{ display: "flex", gap: "8px", padding: "0 20px 16px", borderBottom: "1px solid var(--panel-border)" }}>
+              {["chat", "whiteboard", "sandbox", "playground"].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab as any)}
+                  style={{
+                    flex: 1,
+                    background: activeTab === tab ? "var(--primary-gradient)" : "rgba(255,255,255,0.03)",
+                    border: activeTab === tab ? "none" : "1px solid rgba(255,255,255,0.06)",
+                    color: "#fff",
+                    borderRadius: "10px",
+                    padding: "8px 4px",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    textTransform: "capitalize",
+                    cursor: "pointer",
+                    transition: "all 0.2s"
+                  }}
+                >
+                  {tab === "chat" ? "💬 Chat" : tab === "whiteboard" ? "🎨 Board" : tab === "sandbox" ? "💻 Code" : "🎮 Play"}
+                </button>
+              ))}
+            </div>
+
             <div className="sidebar-section">
               <div className="section-title">
                 <span>Room Members</span>
@@ -500,91 +1741,326 @@ export default function GroupChat() {
               </Link>
             </div>
 
-            {/* Messages */}
-            <div className="messages-container">
-              {messages.map((msg, idx) => {
-                if (msg.type === "system") {
-                  return (
-                    <div key={idx} className="message-system">
-                      {msg.content}
-                    </div>
-                  );
-                }
-
-                const isMe = msg.username === username;
-                const isAI = msg.username?.startsWith("Nova AI");
-                return (
-                  <div
-                    key={idx}
-                    className={`message-wrapper ${isMe ? "sent" : isAI ? "received ai" : "received"}`}
-                  >
-                    <div className="message-meta">
-                      <span className="message-sender">
-                        {isAI ? "Nova AI" : msg.username}
-                        {isAI && <span className="ai-badge">Agent</span>}
-                      </span>
-                      <span>{formatTime(msg.timestamp)}</span>
-                    </div>
-                    <div className="message-bubble">
-                      {msg.text && renderMessageText(msg.text)}
-                      {msg.mediaUrl && (
-                        <div className="message-media">
-                          <img 
-                            src={msg.mediaUrl} 
-                            alt="AI Generated" 
-                            className="generated-image"
-                            loading="lazy"
-                          />
+            {/* Main Area Content Panels */}
+            {activeTab === "chat" ? (
+              <>
+                {/* Messages */}
+                <div className="messages-container">
+                  {messages.map((msg, idx) => {
+                    if (msg.type === "system") {
+                      return (
+                        <div key={idx} className="message-system">
+                          {msg.content}
                         </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-              
-              {/* Other users typing */}
-              {activeTyping && (
-                <div className="message-wrapper received" style={{ animation: "none" }}>
-                  <div className="message-meta">
-                    <span className="message-sender">{activeTyping}</span>
-                  </div>
-                  <div className="message-bubble" style={{ padding: "10px 14px" }}>
-                    <div className="typing-indicator">
-                      <span>typing</span>
-                      <div className="typing-dots">
-                        <div className="typing-dot"></div>
-                        <div className="typing-dot"></div>
-                        <div className="typing-dot"></div>
+                      );
+                    }
+
+                    if (msg.type === "poll") {
+                      const isMe = msg.username === username;
+                      const totalVotes = msg.options?.reduce((sum, opt) => sum + opt.votes, 0) || 0;
+                      const userVote = msg.voters?.[username];
+                      return (
+                        <div key={idx} className={`message-wrapper ${isMe ? "sent" : "received"}`}>
+                          <div className="message-meta">
+                            <span className="message-sender">{msg.username} 📊 Poll</span>
+                            <span>{formatTime(msg.timestamp)}</span>
+                          </div>
+                          <div className="message-bubble" style={{ minWidth: "260px", padding: "16px", background: "rgba(168, 85, 247, 0.08)", border: "1px solid rgba(168, 85, 247, 0.2)" }}>
+                            <h4 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: 700, color: "#fff", lineHeight: "1.4" }}>
+                              {msg.question}
+                            </h4>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                              {msg.options?.map((opt, optIdx) => {
+                                const percent = totalVotes > 0 ? Math.round((opt.votes / totalVotes) * 100) : 0;
+                                const isSelected = userVote === opt.option;
+                                return (
+                                  <button
+                                    key={optIdx}
+                                    type="button"
+                                    onClick={() => castVote(msg.pollId!, opt.option)}
+                                    style={{
+                                      position: "relative",
+                                      width: "100%",
+                                      padding: "10px 12px",
+                                      background: isSelected ? "rgba(168, 85, 247, 0.15)" : "rgba(255,255,255,0.03)",
+                                      border: isSelected ? "1px solid var(--primary)" : "1px solid rgba(255,255,255,0.06)",
+                                      borderRadius: "8px",
+                                      color: "#fff",
+                                      fontSize: "13px",
+                                      textAlign: "left",
+                                      cursor: "pointer",
+                                      overflow: "hidden",
+                                      transition: "all 0.2s"
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        position: "absolute",
+                                        top: 0,
+                                        left: 0,
+                                        bottom: 0,
+                                        width: `${percent}%`,
+                                        background: isSelected ? "rgba(168, 85, 247, 0.2)" : "rgba(255,255,255,0.05)",
+                                        zIndex: 0,
+                                        transition: "width 0.4s ease"
+                                      }}
+                                    />
+                                    <div style={{ position: "relative", zIndex: 1, display: "flex", justifyContent: "space-between" }}>
+                                      <span>{opt.option}</span>
+                                      <span style={{ fontWeight: 600, color: "var(--text-muted)" }}>{percent}% ({opt.votes})</span>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <div style={{ fontSize: "10px", color: "var(--text-dim)", marginTop: "12px", textAlign: "right" }}>
+                              Total Votes: {totalVotes}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    if (msg.type === "share_code") {
+                      const isMe = msg.username === username;
+                      return (
+                        <div key={idx} className={`message-wrapper ${isMe ? "sent" : "received"}`}>
+                          <div className="message-meta">
+                            <span className="message-sender">{msg.username} 💻 Code Sandbox Share</span>
+                            <span>{formatTime(msg.timestamp)}</span>
+                          </div>
+                          <div className="message-bubble" style={{ minWidth: "260px", padding: "16px", background: "rgba(59, 130, 246, 0.08)", border: "1px solid rgba(59, 130, 246, 0.2)" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+                              <span style={{ fontSize: "11px", color: "var(--text-muted)", fontFamily: "monospace" }}>Language: {msg.codeLanguage?.toUpperCase()}</span>
+                              <button
+                                type="button"
+                                onClick={() => loadSharedCodeIntoSandbox(msg.codeSnippet!)}
+                                style={{
+                                  background: "rgba(59, 130, 246, 0.15)",
+                                  border: "1px solid #3b82f6",
+                                  borderRadius: "6px",
+                                  color: "#60a5fa",
+                                  fontSize: "11px",
+                                  padding: "4px 8px",
+                                  cursor: "pointer",
+                                  fontWeight: 600
+                                }}
+                              >
+                                Open in Sandbox
+                              </button>
+                            </div>
+                            <pre style={{
+                              margin: 0,
+                              padding: "10px",
+                              background: "#090d16",
+                              borderRadius: "8px",
+                              overflowX: "auto",
+                              fontSize: "12px",
+                              fontFamily: "monospace",
+                              color: "#38bdf8",
+                              maxHeight: "150px",
+                              lineHeight: "1.5"
+                            }}>
+                              {msg.codeSnippet}
+                            </pre>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    const isMe = msg.username === username;
+                    const isAI = msg.username?.startsWith("Nova AI");
+                    return (
+                      <div
+                        key={idx}
+                        className={`message-wrapper ${isMe ? "sent" : isAI ? "received ai" : "received"}`}
+                      >
+                        <div className="message-meta">
+                          <span className="message-sender">
+                            {isAI ? "Nova AI" : msg.username}
+                            {isAI && <span className="ai-badge">Agent</span>}
+                          </span>
+                          <span>{formatTime(msg.timestamp)}</span>
+                        </div>
+                        <div className="message-bubble">
+                          {msg.text && renderMessageText(msg.text)}
+                          {msg.mediaUrl && (
+                            <div className="message-media">
+                              <img 
+                                src={msg.mediaUrl} 
+                                alt="AI Generated" 
+                                className="generated-image"
+                                loading="lazy"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  
+                  {/* Other users typing */}
+                  {activeTyping && (
+                    <div className="message-wrapper received" style={{ animation: "none" }}>
+                      <div className="message-meta">
+                        <span className="message-sender">{activeTyping}</span>
+                      </div>
+                      <div className="message-bubble" style={{ padding: "10px 14px" }}>
+                        <div className="typing-indicator">
+                          <span>typing</span>
+                          <div className="typing-dots">
+                            <div className="typing-dot"></div>
+                            <div className="typing-dot"></div>
+                            <div className="typing-dot"></div>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
+                  )}
+
+                  <div ref={messagesEndRef} />
                 </div>
-              )}
 
-              <div ref={messagesEndRef} />
-            </div>
+                {/* Footer */}
+                <form onSubmit={handleSendMessage} className="chat-footer">
+                  <div className="input-bar">
+                    <button type="button" className="ai-trigger-btn" onClick={insertAITrigger}>
+                      <span>✨ Ask AI</span>
+                    </button>
+                    <button type="button" className="ai-draw-btn" onClick={insertAIDrawTrigger}>
+                      <span>🎨 Draw</span>
+                    </button>
+                    <button type="button" className="ai-draw-btn" onClick={() => setShowCreatePoll(true)} style={{ borderColor: "rgba(168, 85, 247, 0.4)" }}>
+                      <span>📊 Poll</span>
+                    </button>
+                    <input
+                      type="text"
+                      className="chat-input"
+                      placeholder={`Message #${customRoom.trim() || room}...`}
+                      value={inputText}
+                      onChange={handleInputChange}
+                      maxLength={500}
+                    />
+                    <button type="submit" className="send-btn">
+                      <svg viewBox="0 0 24 24">
+                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                      </svg>
+                    </button>
+                  </div>
+                </form>
+              </>
+            ) : activeTab === "whiteboard" ? (
+              <Whiteboard socket={socketRef.current} connected={socketConnected} username={username} />
+            ) : activeTab === "sandbox" ? (
+              <CodeSandbox
+                html={htmlCode}
+                css={cssCode}
+                js={jsCode}
+                onHtmlChange={setHtmlCode}
+                onCssChange={setCssCode}
+                onJsChange={setJsCode}
+                onShare={shareCodeToChat}
+              />
+            ) : (
+              <Playground socket={socketRef.current} connected={socketConnected} username={username} />
+            )}
+          </div>
+        </div>
+      )}
 
-            {/* Footer */}
-            <form onSubmit={handleSendMessage} className="chat-footer">
-              <div className="input-bar">
-                <button type="button" className="ai-trigger-btn" onClick={insertAITrigger}>
-                  <span>✨ Ask AI</span>
-                </button>
-                <button type="button" className="ai-draw-btn" onClick={insertAIDrawTrigger}>
-                  <span>🎨 Draw</span>
-                </button>
+      {showCreatePoll && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(15, 23, 42, 0.75)",
+          backdropFilter: "blur(8px)",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          zIndex: 1000,
+          padding: "16px"
+        }}>
+          <div className="glass-card" style={{ width: "100%", maxWidth: "450px", padding: "28px", border: "1px solid var(--panel-border)" }}>
+            <h3 style={{ color: "#fff", margin: "0 0 16px 0", fontSize: "18px", fontWeight: 700 }}>Create Room Poll</h3>
+            <form onSubmit={submitPoll}>
+              <div className="form-group" style={{ marginBottom: "16px" }}>
+                <label className="form-label" style={{ fontSize: "12px" }}>Poll Question</label>
                 <input
                   type="text"
-                  className="chat-input"
-                  placeholder={`Message #${customRoom.trim() || room}...`}
-                  value={inputText}
-                  onChange={handleInputChange}
-                  maxLength={500}
+                  className="form-input"
+                  placeholder="What is your favorite framework?"
+                  value={pollQuestion}
+                  onChange={(e) => setPollQuestion(e.target.value)}
+                  required
                 />
-                <button type="submit" className="send-btn">
-                  <svg viewBox="0 0 24 24">
-                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-                  </svg>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: "20px" }}>
+                <label className="form-label" style={{ fontSize: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>Options</span>
+                  <button
+                    type="button"
+                    onClick={() => setPollOptions([...pollOptions, ""])}
+                    style={{ background: "none", border: "none", color: "var(--primary)", fontSize: "11px", fontWeight: 600, cursor: "pointer" }}
+                  >
+                    + Add Option
+                  </button>
+                </label>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {pollOptions.map((opt, idx) => (
+                    <div key={idx} style={{ display: "flex", gap: "8px" }}>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder={`Option ${idx + 1}`}
+                        value={opt}
+                        onChange={(e) => {
+                          const updated = [...pollOptions];
+                          updated[idx] = e.target.value;
+                          setPollOptions(updated);
+                        }}
+                        required
+                      />
+                      {pollOptions.length > 2 && (
+                        <button
+                          type="button"
+                          onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))}
+                          style={{
+                            background: "rgba(239, 68, 68, 0.15)",
+                            border: "none",
+                            borderRadius: "8px",
+                            color: "#ef4444",
+                            padding: "0 12px",
+                            cursor: "pointer",
+                            fontSize: "12px"
+                          }}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreatePoll(false);
+                    setPollQuestion("");
+                    setPollOptions(["", ""]);
+                  }}
+                  className="leave-btn"
+                  style={{ borderRadius: "10px", width: "fit-content", padding: "10px 18px", color: "var(--text-muted)" }}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="back-to-chat-btn" style={{ background: "var(--primary-gradient)", border: "none", boxShadow: "0 4px 12px var(--primary-glow)", padding: "10px 18px" }}>
+                  Launch Poll
                 </button>
               </div>
             </form>

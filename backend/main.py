@@ -141,6 +141,10 @@ class ChatManager:
         self.ws_to_room: Dict[WebSocket, str] = {}
         # Maps room_name -> List of chat history dicts (limited to 20)
         self.room_history: Dict[str, List[dict]] = {}
+        # Maps room_name -> Dict[poll_id -> poll_details]
+        self.room_polls: Dict[str, Dict[str, dict]] = {}
+        # Maps room_name -> Dict[game_type -> game_data]
+        self.room_games: Dict[str, dict] = {}
 
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
@@ -163,6 +167,10 @@ class ChatManager:
                 # Keep history clean
                 if room in self.room_history:
                     del self.room_history[room]
+                if room in self.room_polls:
+                    del self.room_polls[room]
+                if room in self.room_games:
+                    del self.room_games[room]
                 
         # Notify remaining users in the room
         if room and username:
@@ -182,6 +190,27 @@ class ChatManager:
         if room not in self.room_connections:
             self.room_connections[room] = set()
         self.room_connections[room].add(websocket)
+        
+        # Send room history to the newly connected user first
+        history = self.room_history.get(room, [])
+        for msg in history:
+            try:
+                await websocket.send_json(msg)
+            except Exception:
+                pass
+                
+        # Send current games state
+        room_state = self.room_games.get(room)
+        if room_state:
+            try:
+                await websocket.send_json({
+                    "type": "games_sync",
+                    "synth": room_state.get("synth", [[0 for _ in range(8)] for _ in range(8)]),
+                    "racer_snippet": room_state.get("racer", {}).get("snippet"),
+                    "trivia_active": "trivia" in room_state
+                })
+            except Exception:
+                pass
         
         system_msg = {
             "type": "system",
@@ -334,11 +363,236 @@ async def websocket_endpoint(websocket: WebSocket):
                 if room and username:
                     await manager.send_typing_status(room, username, is_typing, websocket)
                     
+            elif msg_type == "draw":
+                if room:
+                    # Broadcast draw event to everyone except the sender
+                    for connection in list(manager.room_connections.get(room, [])):
+                        if connection != websocket:
+                            try:
+                                await connection.send_json(message)
+                            except Exception:
+                                pass
+                                
+            elif msg_type == "clear_canvas":
+                if room:
+                    await manager.broadcast_to_room(room, message)
+                    
+            elif msg_type == "poll":
+                poll_id = message.get("pollId")
+                question = message.get("question")
+                options_input = message.get("options", [])
+                if room and username and poll_id and question and options_input:
+                    options = [{"option": opt, "votes": 0} for opt in options_input]
+                    poll_msg = {
+                        "type": "poll",
+                        "username": username,
+                        "pollId": poll_id,
+                        "question": question,
+                        "options": options,
+                        "voters": {},
+                        "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+                    }
+                    if room not in manager.room_polls:
+                        manager.room_polls[room] = {}
+                    manager.room_polls[room][poll_id] = poll_msg
+                    
+                    manager.save_to_history(room, poll_msg)
+                    await manager.broadcast_to_room(room, poll_msg)
+                    
+            elif msg_type == "vote":
+                poll_id = message.get("pollId")
+                option_chosen = message.get("option")
+                if room and username and poll_id and option_chosen:
+                    room_polls = manager.room_polls.get(room, {})
+                    if poll_id in room_polls:
+                        poll = room_polls[poll_id]
+                        voters = poll.setdefault("voters", {})
+                        
+                        prev_vote = voters.get(username)
+                        if prev_vote == option_chosen:
+                            voters.pop(username)
+                        else:
+                            voters[username] = option_chosen
+                            
+                        for opt in poll["options"]:
+                            opt["votes"] = sum(1 for user, chosen in voters.items() if chosen == opt["option"])
+                            
+                        # Update poll in history
+                        history = manager.room_history.get(room, [])
+                        for h_msg in history:
+                            if h_msg.get("type") == "poll" and h_msg.get("pollId") == poll_id:
+                                h_msg["options"] = poll["options"]
+                                h_msg["voters"] = voters
+                                
+                        update_msg = {
+                            "type": "poll_update",
+                            "pollId": poll_id,
+                            "options": poll["options"],
+                            "voters": voters
+                        }
+                        await manager.broadcast_to_room(room, update_msg)
+                        
+            elif msg_type == "share_code":
+                code_snippet = message.get("codeSnippet")
+                code_language = message.get("codeLanguage")
+                if room and username and code_snippet:
+                    code_msg = {
+                        "type": "share_code",
+                        "username": username,
+                        "codeLanguage": code_language or "html",
+                        "codeSnippet": code_snippet,
+                        "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+                    }
+                    manager.save_to_history(room, code_msg)
+                    await manager.broadcast_to_room(room, code_msg)
+                    
+            elif msg_type == "synth_toggle":
+                row = message.get("row")
+                col = message.get("col")
+                if room and row is not None and col is not None:
+                    room_state = manager.room_games.setdefault(room, {})
+                    synth_grid = room_state.setdefault("synth", [[0 for _ in range(8)] for _ in range(8)])
+                    synth_grid[row][col] = 1 if synth_grid[row][col] == 0 else 0
+                    await manager.broadcast_to_room(room, {
+                        "type": "synth_update",
+                        "row": row,
+                        "col": col,
+                        "state": synth_grid[row][col]
+                    })
+                    
+            elif msg_type == "racer_start":
+                if room:
+                    snippets = [
+                        "def quick_sort(arr):\n    if len(arr) <= 1: return arr\n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quick_sort(left) + middle + quick_sort(right)",
+                        "const binarySearch = (arr, val) => {\n  let start = 0, end = arr.length - 1;\n  while (start <= end) {\n    let mid = Math.floor((start + end) / 2);\n    if (arr[mid] === val) return mid;\n    if (arr[mid] < val) start = mid + 1;\n    else end = mid - 1;\n  }\n  return -1;\n};",
+                        "async def fetch_data(url: str):\n    async with httpx.AsyncClient() as client:\n        response = await client.get(url)\n        response.raise_for_status()\n        return response.json()"
+                    ]
+                    selected = random.choice(snippets)
+                    room_state = manager.room_games.setdefault(room, {})
+                    room_state["racer"] = {
+                        "snippet": selected,
+                        "progress": {},
+                        "finished": []
+                    }
+                    await manager.broadcast_to_room(room, {
+                        "type": "racer_init",
+                        "snippet": selected
+                    })
+                    
+            elif msg_type == "racer_progress":
+                percent = message.get("progress")
+                wpm = message.get("wpm")
+                if room and username and percent is not None:
+                    room_state = manager.room_games.setdefault(room, {})
+                    racer_data = room_state.setdefault("racer", {"progress": {}, "finished": []})
+                    racer_data["progress"][username] = {"percent": percent, "wpm": wpm or 0}
+                    await manager.broadcast_to_room(room, {
+                        "type": "racer_update",
+                        "progress": racer_data["progress"]
+                    })
+                    
+            elif msg_type == "racer_finished":
+                wpm = message.get("wpm")
+                time_taken = message.get("time")
+                if room and username and wpm is not None:
+                    room_state = manager.room_games.setdefault(room, {})
+                    racer_data = room_state.setdefault("racer", {"progress": {}, "finished": []})
+                    if not any(f["username"] == username for f in racer_data["finished"]):
+                        racer_data["finished"].append({
+                            "username": username,
+                            "wpm": wpm,
+                            "time": time_taken
+                        })
+                    await manager.broadcast_to_room(room, {
+                        "type": "racer_leaderboard",
+                        "finished": racer_data["finished"]
+                    })
+                    
+            elif msg_type == "trivia_start":
+                if room:
+                    selected_questions = random.sample(TRIVIA_BANK, min(len(TRIVIA_BANK), 5))
+                    room_state = manager.room_games.setdefault(room, {})
+                    room_state["trivia"] = {
+                        "questions": selected_questions,
+                        "currentIndex": 0,
+                        "scores": {},
+                        "answers_received": {}
+                    }
+                    await manager.broadcast_to_room(room, {
+                        "type": "trivia_next",
+                        "question": selected_questions[0]["question"],
+                        "options": selected_questions[0]["options"],
+                        "index": 0,
+                        "total": len(selected_questions)
+                    })
+                    
+            elif msg_type == "trivia_submit":
+                idx = message.get("index")
+                opt_idx = message.get("optionIndex")
+                time_taken = message.get("timeTaken", 10.0)
+                if room and username and idx is not None and opt_idx is not None:
+                    room_state = manager.room_games.setdefault(room, {})
+                    trivia = room_state.get("trivia")
+                    if trivia and trivia["currentIndex"] == idx:
+                        correct_idx = trivia["questions"][idx]["answerIndex"]
+                        is_correct = (opt_idx == correct_idx)
+                        scores = trivia.setdefault("scores", {})
+                        if is_correct:
+                            points = max(100, int((15.0 - time_taken) * 60))
+                            scores[username] = scores.get(username, 0) + points
+                        else:
+                            scores[username] = scores.get(username, 0)
+                        answers = trivia.setdefault("answers_received", {})
+                        answers[username] = {"option": opt_idx, "correct": is_correct}
+                        
+            elif msg_type == "trivia_reveal_request":
+                if room:
+                    room_state = manager.room_games.setdefault(room, {})
+                    trivia = room_state.get("trivia")
+                    if trivia:
+                        idx = trivia["currentIndex"]
+                        correct_idx = trivia["questions"][idx]["answerIndex"]
+                        await manager.broadcast_to_room(room, {
+                            "type": "trivia_reveal",
+                            "correctIndex": correct_idx,
+                            "scores": trivia.get("scores", {})
+                        })
+                        
+            elif msg_type == "trivia_next_request":
+                if room:
+                    room_state = manager.room_games.setdefault(room, {})
+                    trivia = room_state.get("trivia")
+                    if trivia:
+                        next_idx = trivia["currentIndex"] + 1
+                        trivia["currentIndex"] = next_idx
+                        trivia["answers_received"] = {}
+                        if next_idx < len(trivia["questions"]):
+                            await manager.broadcast_to_room(room, {
+                                "type": "trivia_next",
+                                "question": trivia["questions"][next_idx]["question"],
+                                "options": trivia["questions"][next_idx]["options"],
+                                "index": next_idx,
+                                "total": len(trivia["questions"])
+                            })
+                        else:
+                            await manager.broadcast_to_room(room, {
+                                "type": "trivia_end",
+                                "scores": trivia.get("scores", {})
+                            })
+                            
     except WebSocketDisconnect:
         await manager.disconnect(websocket)
     except Exception as e:
         print(f"WebSocket exception: {e}")
         await manager.disconnect(websocket)
+
+TRIVIA_BANK = [
+    {"question": "Which of the following is NOT a JavaScript data type?", "options": ["Undefined", "Boolean", "Float", "Symbol"], "answerIndex": 2},
+    {"question": "What is the time complexity of searching in a balanced Binary Search Tree?", "options": ["O(1)", "O(log n)", "O(n)", "O(n log n)"], "answerIndex": 1},
+    {"question": "What does HTTP status code 403 represent?", "options": ["Bad Request", "Forbidden", "Unauthorized", "Not Found"], "answerIndex": 1},
+    {"question": "Which HTTP method is typically used to update an entire resource?", "options": ["POST", "PATCH", "PUT", "DELETE"], "answerIndex": 2},
+    {"question": "In React, what hook is used to perform side effects?", "options": ["useState", "useContext", "useEffect", "useReducer"], "answerIndex": 2}
+]
 
 cached_news_db: Dict[str, dict] = {}
 
