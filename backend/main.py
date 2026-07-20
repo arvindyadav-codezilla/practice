@@ -9,6 +9,7 @@ import urllib.parse
 import random
 import re
 import xml.etree.ElementTree as ET
+import html
 from typing import Dict, Set, List
 from dotenv import load_dotenv
 
@@ -339,8 +340,7 @@ async def websocket_endpoint(websocket: WebSocket):
         print(f"WebSocket exception: {e}")
         await manager.disconnect(websocket)
 
-# RSS news data fetching & endpoints
-cached_news: List[dict] = []
+cached_news_db: Dict[str, dict] = {}
 
 def get_fallback_news():
     return [
@@ -349,7 +349,7 @@ def get_fallback_news():
             "title": "Next-Gen AI Models Redefining Real-Time Web Apps",
             "link": "https://techcrunch.com",
             "description": "A new generation of small, highly efficient language models is enabling developers to run intelligent agents directly inside browser applications with minimal latency.",
-            "imageUrl": "https://images.unsplash.com/photo-1677442136019-21780efad99a?w=500&auto=format&fit=crop&q=60",
+            "imageUrl": "https://images.unsplash.com/photo-1677442136019-21780efad99a?w=600&auto=format&fit=crop&q=60",
             "pubDate": "Mon, 20 Jul 2026 12:00:00 GMT",
             "likes": 12,
             "comments": []
@@ -366,8 +366,21 @@ def get_fallback_news():
         }
     ]
 
-def fetch_tech_news():
-    url = "https://techcrunch.com/feed/"
+def fetch_custom_news(q: str = "", category: str = "Technology", country: str = "US", language: str = "en"):
+    global cached_news_db
+    
+    hl = language.strip().lower()
+    gl = country.strip().upper()
+    
+    search_term = q.strip()
+    if search_term:
+        query = f"{search_term} {category}"
+    else:
+        query = category
+        
+    encoded_query = urllib.parse.quote(query)
+    url = f"https://news.google.com/rss/search?q={encoded_query}&hl={hl}-{gl}&gl={gl}&ceid={gl}:{hl}"
+    
     tech_images = [
         "https://images.unsplash.com/photo-1518770660439-4636190af475?w=600&auto=format&fit=crop&q=60", # Microchip
         "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=60", # Abstract purple
@@ -385,7 +398,7 @@ def fetch_tech_news():
             url, 
             headers={'User-Agent': 'Mozilla/5.0'}
         )
-        with urllib.request.urlopen(req, timeout=5) as response:
+        with urllib.request.urlopen(req, timeout=6) as response:
             xml_data = response.read()
         
         root = ET.fromstring(xml_data)
@@ -395,27 +408,34 @@ def fetch_tech_news():
             title = item.find('title').text if item.find('title') is not None else ""
             link = item.find('link').text if item.find('link') is not None else ""
             
+            clean_id = re.sub(r'\W+', '', title)[:20].lower()
+            if not clean_id:
+                clean_id = f"news_{random.randint(10000, 99999)}"
+                
+            if clean_id in cached_news_db:
+                news_items.append(cached_news_db[clean_id])
+                continue
+                
             desc_element = item.find('description')
             description = ""
             if desc_element is not None and desc_element.text:
                 description = re.sub('<[^<]+?>', '', desc_element.text)
+                description = html.unescape(description)
+                if description.startswith(title):
+                    description = description[len(title):].strip()
                 if len(description) > 150:
                     description = description[:147] + "..."
             
             image_url = ""
-            
-            # 1. Search media content tag
             media_content = item.find('{http://search.yahoo.com/mrss/}content')
             if media_content is not None:
                 image_url = media_content.attrib.get('url', '')
                 
-            # 2. Search media thumbnail tag
             if not image_url:
                 media_thumb = item.find('{http://search.yahoo.com/mrss/}thumbnail')
                 if media_thumb is not None:
                     image_url = media_thumb.attrib.get('url', '')
                     
-            # 3. Search enclosure image tag
             if not image_url:
                 enclosure = item.find('enclosure')
                 if enclosure is not None:
@@ -423,66 +443,66 @@ def fetch_tech_news():
                     if 'image' in enc_type:
                         image_url = enclosure.attrib.get('url', '')
             
-            # 4. Search description image source
             if not image_url and desc_element is not None and desc_element.text:
                 img_match = re.search(r'src="([^"]+)"', desc_element.text)
                 if img_match:
                     image_url = img_match.group(1)
             
-            # 5. Fallback index modulo to guarantee different images
             if not image_url:
                 image_url = tech_images[idx % len(tech_images)]
                 
             pub_date = item.find('pubDate').text if item.find('pubDate') is not None else ""
             
-            news_items.append({
-                "id": re.sub(r'\W+', '', title)[:20] + str(random.randint(100, 999)),
+            new_item = {
+                "id": clean_id,
                 "title": title,
                 "link": link,
-                "description": description,
+                "description": description or "Read the full story on Google News.",
                 "imageUrl": image_url,
                 "pubDate": pub_date,
                 "likes": random.randint(2, 28),
                 "comments": []
-            })
+            }
+            
+            cached_news_db[clean_id] = new_item
+            news_items.append(new_item)
             
         return news_items
     except Exception as e:
-        print(f"Error fetching RSS news: {e}")
-        return get_fallback_news()
+        print(f"Error fetching custom news: {e}")
+        fallback = get_fallback_news()
+        for fb_item in fallback:
+            if fb_item["id"] not in cached_news_db:
+                cached_news_db[fb_item["id"]] = fb_item
+        return fallback
 
 @app.get("/api/news")
-def get_news():
-    global cached_news
-    if not cached_news:
-        cached_news = fetch_tech_news()
-    return cached_news
+def get_news(q: str = "", category: str = "Technology", country: str = "US", language: str = "en"):
+    return fetch_custom_news(q, category, country, language)
 
 @app.post("/api/news/{news_id}/like")
 def like_news(news_id: str):
-    global cached_news
-    for item in cached_news:
-        if item["id"] == news_id:
-            item["likes"] += 1
-            return {"status": "ok", "likes": item["likes"]}
+    global cached_news_db
+    if news_id in cached_news_db:
+        cached_news_db[news_id]["likes"] += 1
+        return {"status": "ok", "likes": cached_news_db[news_id]["likes"]}
     return {"status": "error", "message": "News item not found"}
 
 @app.post("/api/news/{news_id}/comment")
 def comment_news(news_id: str, payload: dict):
-    global cached_news
+    global cached_news_db
     comment_text = payload.get("text", "").strip()
     author = payload.get("username", "Anonymous").strip()
     if not comment_text:
         return {"status": "error", "message": "Comment text is empty"}
-    for item in cached_news:
-        if item["id"] == news_id:
-            comment = {
-                "author": author,
-                "text": comment_text,
-                "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
-            }
-            item["comments"].append(comment)
-            return {"status": "ok", "comment": comment}
+    if news_id in cached_news_db:
+        comment = {
+            "author": author,
+            "text": comment_text,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z"
+        }
+        cached_news_db[news_id]["comments"].append(comment)
+        return {"status": "ok", "comment": comment}
     return {"status": "error", "message": "News item not found"}
 
 @app.get("/")

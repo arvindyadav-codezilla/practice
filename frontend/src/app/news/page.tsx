@@ -28,6 +28,13 @@ export default function NewsPage() {
   const [serverUrl, setServerUrl] = useState("");
   const [loading, setLoading] = useState(true);
 
+  // Search & Filter parameters
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [category, setCategory] = useState("Technology");
+  const [country, setCountry] = useState("US");
+  const [language, setLanguage] = useState("en");
+
   // Enable document body scrolling on mount, reset to hidden on unmount
   useEffect(() => {
     document.body.style.overflow = "auto";
@@ -60,7 +67,13 @@ export default function NewsPage() {
   };
 
   const loadNews = async () => {
-    const url = getHttpUrl("/api/news");
+    const params = new URLSearchParams({
+      q: searchQuery,
+      category: category,
+      country: country,
+      language: language
+    });
+    const url = getHttpUrl(`/api/news?${params.toString()}`);
     if (!url) return;
     setLoading(true);
     try {
@@ -80,7 +93,12 @@ export default function NewsPage() {
     if (serverUrl) {
       loadNews();
     }
-  }, [serverUrl]);
+  }, [serverUrl, searchQuery, category, country, language]);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSearchQuery(searchInput);
+  };
 
   const handleLikeNews = async (id: string) => {
     const url = getHttpUrl(`/api/news/${id}/like`);
@@ -152,6 +170,138 @@ export default function NewsPage() {
           </svg>
           Back to Chat
         </Link>
+      </div>
+
+      {/* Filters Panel */}
+      <div className="news-filters-panel glass-card" style={{ padding: "20px", borderRadius: "16px", marginBottom: "32px", border: "1px solid var(--panel-border)", display: "flex", flexDirection: "column", gap: "16px" }}>
+        
+        {/* Search & Selectors Row */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", alignItems: "center" }}>
+          
+          {/* Search bar */}
+          <form onSubmit={handleSearchSubmit} style={{ flex: 1, minWidth: "260px", display: "flex", gap: "8px" }}>
+            <input
+              type="text"
+              placeholder="Search news articles (e.g. AI, Space, Cricket...)"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              style={{
+                flex: 1,
+                background: "rgba(255, 255, 255, 0.04)",
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                borderRadius: "12px",
+                padding: "10px 16px",
+                color: "#fff",
+                fontSize: "14px",
+                outline: "none",
+                transition: "all 0.2s"
+              }}
+            />
+            <button
+              type="submit"
+              style={{
+                background: "var(--primary-gradient)",
+                border: "none",
+                borderRadius: "12px",
+                padding: "10px 20px",
+                color: "#fff",
+                fontWeight: 600,
+                fontSize: "14px",
+                cursor: "pointer",
+                boxShadow: "0 4px 12px var(--primary-glow)",
+                transition: "all 0.2s"
+              }}
+            >
+              Search
+            </button>
+          </form>
+
+          {/* Selectors */}
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            
+            {/* Country Selector */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <span style={{ fontSize: "11px", color: "var(--text-dim)", fontWeight: 600, textTransform: "uppercase" }}>Country</span>
+              <select
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                style={{
+                  background: "rgba(15, 12, 30, 0.8)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  borderRadius: "10px",
+                  padding: "8px 12px",
+                  color: "#fff",
+                  fontSize: "13px",
+                  outline: "none",
+                  cursor: "pointer"
+                }}
+              >
+                <option value="US">🇺🇸 United States</option>
+                <option value="IN">🇮🇳 India</option>
+                <option value="GB">🇬🇧 United Kingdom</option>
+                <option value="CA">🇨🇦 Canada</option>
+                <option value="AU">🇦🇺 Australia</option>
+                <option value="ES">🇪🇸 Spain</option>
+                <option value="FR">🇫🇷 France</option>
+                <option value="DE">🇩🇪 Germany</option>
+              </select>
+            </div>
+
+            {/* Language Selector */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <span style={{ fontSize: "11px", color: "var(--text-dim)", fontWeight: 600, textTransform: "uppercase" }}>Language</span>
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                style={{
+                  background: "rgba(15, 12, 30, 0.8)",
+                  border: "1px solid rgba(255, 255, 255, 0.08)",
+                  borderRadius: "10px",
+                  padding: "8px 12px",
+                  color: "#fff",
+                  fontSize: "13px",
+                  outline: "none",
+                  cursor: "pointer"
+                }}
+              >
+                <option value="en">English</option>
+                <option value="hi">Hindi (हिन्दी)</option>
+                <option value="es">Spanish (Español)</option>
+                <option value="fr">French (Français)</option>
+                <option value="de">German (Deutsch)</option>
+              </select>
+            </div>
+
+          </div>
+        </div>
+
+        {/* Category Chips Scroll */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+          <span style={{ fontSize: "11px", color: "var(--text-dim)", fontWeight: 600, textTransform: "uppercase", textAlign: "left" }}>Category / Genre</span>
+          <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "4px", scrollbarWidth: "none" }} className="hide-scrollbar">
+            {["Technology", "Sports", "Entertainment", "Business", "Science", "Health", "Astrology", "World"].map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setCategory(cat)}
+                style={{
+                  background: category === cat ? "var(--primary-gradient)" : "rgba(255, 255, 255, 0.03)",
+                  border: category === cat ? "none" : "1px solid rgba(255, 255, 255, 0.06)",
+                  color: "#fff",
+                  borderRadius: "20px",
+                  padding: "8px 16px",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  whiteSpace: "nowrap",
+                  cursor: "pointer",
+                  transition: "all 0.2s"
+                }}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        </div>
+
       </div>
 
       {loading ? (
