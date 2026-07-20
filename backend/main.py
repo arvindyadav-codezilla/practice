@@ -480,6 +480,13 @@ def fetch_custom_news(q: str = "", category: str = "Technology", country: str = 
 def get_news(q: str = "", category: str = "Technology", country: str = "US", language: str = "en"):
     return fetch_custom_news(q, category, country, language)
 
+@app.get("/api/news/{news_id}")
+def get_news_detail(news_id: str):
+    global cached_news_db
+    if news_id in cached_news_db:
+        return cached_news_db[news_id]
+    return {"status": "error", "message": "News item not found"}
+
 @app.post("/api/news/{news_id}/like")
 def like_news(news_id: str):
     global cached_news_db

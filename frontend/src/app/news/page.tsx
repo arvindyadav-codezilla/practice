@@ -156,6 +156,16 @@ export default function NewsPage() {
     setTimeout(() => setToastMsg(null), 3000);
   };
 
+  const formatNewsDate = (dateStr: string) => {
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr || "Recently";
+      return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    } catch {
+      return dateStr || "Recently";
+    }
+  };
+
   return (
     <div className="news-page-container">
       <div className="news-page-header">
@@ -313,60 +323,64 @@ export default function NewsPage() {
       ) : (
         <div className="news-grid">
           {news.map((item) => (
-            <div key={item.id} className="news-page-card">
-              {item.imageUrl && (
-                <div className="news-page-card-image">
-                  <img src={item.imageUrl} alt={item.title} />
-                </div>
-              )}
-              <div className="news-page-card-content">
-                <h3 className="news-page-card-title">
-                  <a href={item.link} target="_blank" rel="noopener noreferrer">
-                    {item.title}
-                  </a>
-                </h3>
-                <p className="news-page-card-desc">{item.description}</p>
-                
-                <div className="news-page-card-footer">
-                  <div className="news-page-card-actions">
-                    <button className="news-page-action-btn like" onClick={() => handleLikeNews(item.id)}>
-                      <span>❤️</span> {item.likes}
-                    </button>
-                    <button className="news-page-action-btn comment" onClick={() => setActiveCommentBox(activeCommentBox === item.id ? null : item.id)}>
-                      <span>💬</span> {item.comments.length}
-                    </button>
-                    <button className="news-page-action-btn share" onClick={() => handleShareNews(item.link)}>
-                      <span>📤</span> Share
-                    </button>
+            <div key={item.id} className="news-page-card" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+              <Link href={`/news/${item.id}`} style={{ textDecoration: "none", color: "inherit", display: "flex", flexDirection: "column", flex: 1 }}>
+                {item.imageUrl && (
+                  <div className="news-page-card-image">
+                    <img src={item.imageUrl} alt={item.title} />
                   </div>
-
-                  {activeCommentBox === item.id && (
-                    <div className="news-page-comments-section">
-                      <div className="news-page-comments-list">
-                        {item.comments.length === 0 ? (
-                          <div style={{ fontSize: "11px", color: "var(--text-dim)", padding: "4px 0" }}>No comments yet. Be the first!</div>
-                        ) : (
-                          item.comments.map((c, i) => (
-                            <div key={i} className="news-page-comment-item">
-                              <span className="news-page-comment-author">{c.author}:</span>
-                              <span className="news-page-comment-text">{c.text}</span>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                      <form onSubmit={(e) => handleAddComment(e, item.id)} className="news-page-comment-form">
-                        <input
-                          type="text"
-                          placeholder="Write a comment..."
-                          value={commentInput}
-                          onChange={(e) => setCommentInput(e.target.value)}
-                          required
-                        />
-                        <button type="submit">Send</button>
-                      </form>
-                    </div>
-                  )}
+                )}
+                <div className="news-page-card-content" style={{ display: "flex", flexDirection: "column", flex: 1, padding: "20px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "var(--text-dim)", marginBottom: "8px", fontWeight: 500 }}>
+                    <span>📅</span>
+                    <span>{formatNewsDate(item.pubDate)}</span>
+                  </div>
+                  <h3 className="news-page-card-title" style={{ margin: "0 0 10px 0" }}>
+                    {item.title}
+                  </h3>
+                  <p className="news-page-card-desc" style={{ flex: 1 }}>{item.description}</p>
                 </div>
+              </Link>
+              
+              <div className="news-page-card-footer" style={{ padding: "0 20px 20px" }}>
+                <div className="news-page-card-actions" style={{ borderTop: "1px solid rgba(255, 255, 255, 0.06)", paddingTop: "16px" }}>
+                  <button className="news-page-action-btn like" onClick={() => handleLikeNews(item.id)}>
+                    <span>❤️</span> {item.likes}
+                  </button>
+                  <button className="news-page-action-btn comment" onClick={() => setActiveCommentBox(activeCommentBox === item.id ? null : item.id)}>
+                    <span>💬</span> {item.comments.length}
+                  </button>
+                  <button className="news-page-action-btn share" onClick={() => handleShareNews(item.link)}>
+                    <span>📤</span> Share
+                  </button>
+                </div>
+
+                {activeCommentBox === item.id && (
+                  <div className="news-page-comments-section" style={{ marginTop: "16px" }}>
+                    <div className="news-page-comments-list" style={{ maxHeight: "120px", overflowY: "auto" }}>
+                      {item.comments.length === 0 ? (
+                        <div style={{ fontSize: "11px", color: "var(--text-dim)", padding: "4px 0" }}>No comments yet. Be the first!</div>
+                      ) : (
+                        item.comments.map((c, i) => (
+                          <div key={i} className="news-page-comment-item">
+                            <span className="news-page-comment-author">{c.author}:</span>
+                            <span className="news-page-comment-text">{c.text}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                    <form onSubmit={(e) => handleAddComment(e, item.id)} className="news-page-comment-form">
+                      <input
+                        type="text"
+                        placeholder="Write a comment..."
+                        value={commentInput}
+                        onChange={(e) => setCommentInput(e.target.value)}
+                        required
+                      />
+                      <button type="submit">Send</button>
+                    </form>
+                  </div>
+                )}
               </div>
             </div>
           ))}
