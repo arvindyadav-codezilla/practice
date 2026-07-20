@@ -26,6 +26,8 @@ export default function NewsDetailClient({ id }: { id: string }) {
   const [commentInput, setCommentInput] = useState("");
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [serverUrl, setServerUrl] = useState("");
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [summarizing, setSummarizing] = useState(false);
 
   // Enable document body scrolling on mount, reset to hidden on unmount
   useEffect(() => {
@@ -133,6 +135,24 @@ export default function NewsDetailClient({ id }: { id: string }) {
     setTimeout(() => setToastMsg(null), 3000);
   };
 
+  const handleGetSummary = async () => {
+    if (!item) return;
+    const url = getHttpUrl(`/api/news/${id}/summary`);
+    if (!url) return;
+    setSummarizing(true);
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.status === "ok") {
+        setAiSummary(data.summary);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSummarizing(false);
+    }
+  };
+
   const formatNewsDate = (dateStr: string) => {
     try {
       const d = new Date(dateStr);
@@ -193,6 +213,51 @@ export default function NewsDetailClient({ id }: { id: string }) {
         <h1 className="news-page-title" style={{ fontSize: "28px", lineHeight: "1.35", color: "#fff", marginBottom: "20px", background: "none", WebkitTextFillColor: "initial", textAlign: "left" }}>
           {item.title}
         </h1>
+
+        {/* AI Summarizer Widget */}
+        <div style={{
+          background: "linear-gradient(135deg, rgba(168, 85, 247, 0.08) 0%, rgba(59, 130, 246, 0.08) 100%)",
+          border: "1px solid rgba(168, 85, 247, 0.2)",
+          borderRadius: "16px",
+          padding: "20px",
+          marginBottom: "24px",
+          textAlign: "left"
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: aiSummary ? "14px" : "0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "20px" }}>✨</span>
+              <div>
+                <h4 style={{ margin: 0, fontSize: "14px", fontWeight: 700, color: "#e9d5ff" }}>Nova AI Summarizer</h4>
+                <p style={{ margin: 0, fontSize: "11px", color: "var(--text-dim)" }}>Extract 3 key takeaways using generative AI</p>
+              </div>
+            </div>
+            {!aiSummary && (
+              <button
+                onClick={handleGetSummary}
+                disabled={summarizing}
+                style={{
+                  background: "linear-gradient(135deg, #a855f7 0%, #3b82f6 100%)",
+                  border: "none",
+                  borderRadius: "10px",
+                  padding: "8px 16px",
+                  color: "#fff",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  opacity: summarizing ? 0.7 : 1,
+                  boxShadow: "0 4px 12px rgba(168, 85, 247, 0.2)"
+                }}
+              >
+                {summarizing ? "Summarizing..." : "Summarize Article"}
+              </button>
+            )}
+          </div>
+          {aiSummary && (
+            <div style={{ fontSize: "13px", color: "var(--text-main)", lineHeight: "1.6", whiteSpace: "pre-line" }}>
+              {aiSummary}
+            </div>
+          )}
+        </div>
 
         <p style={{ fontSize: "16px", lineHeight: "1.7", color: "var(--text-main)", marginBottom: "32px", textAlign: "left" }}>
           {item.description}

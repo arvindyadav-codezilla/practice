@@ -381,18 +381,55 @@ def fetch_custom_news(q: str = "", category: str = "Technology", country: str = 
     encoded_query = urllib.parse.quote(query)
     url = f"https://news.google.com/rss/search?q={encoded_query}&hl={hl}-{gl}&gl={gl}&ceid={gl}:{hl}"
     
-    tech_images = [
-        "https://images.unsplash.com/photo-1518770660439-4636190af475?w=600&auto=format&fit=crop&q=60", # Microchip
-        "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=60", # Abstract purple
-        "https://images.unsplash.com/photo-1677442136019-21780efad99a?w=600&auto=format&fit=crop&q=60", # AI digital brain
-        "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600&auto=format&fit=crop&q=60", # Cyber security
-        "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=600&auto=format&fit=crop&q=60", # High tech server
-        "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=60", # Globe connectivity
-        "https://images.unsplash.com/photo-1531297484001-80022131f5a1?w=600&auto=format&fit=crop&q=60", # Sleek laptop
-        "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=600&auto=format&fit=crop&q=60", # Developer code
-        "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?w=600&auto=format&fit=crop&q=60", # Tech workspace
-        "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=600&auto=format&fit=crop&q=60", # Futuristic tech room
-    ]
+    category_images_db = {
+        "Technology": [
+            "https://images.unsplash.com/photo-1518770660439-4636190af475?w=600&auto=format&fit=crop&q=60",
+            "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=60",
+            "https://images.unsplash.com/photo-1677442136019-21780efad99a?w=600&auto=format&fit=crop&q=60",
+            "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600&auto=format&fit=crop&q=60",
+            "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=600&auto=format&fit=crop&q=60"
+        ],
+        "Sports": [
+            "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=600&auto=format&fit=crop&q=60",
+            "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=600&auto=format&fit=crop&q=60",
+            "https://images.unsplash.com/photo-1471295263379-6cd96c1f03d2?w=600&auto=format&fit=crop&q=60",
+            "https://images.unsplash.com/photo-1517649763962-0c623066013b?w=600&auto=format&fit=crop&q=60"
+        ],
+        "Entertainment": [
+            "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=60",
+            "https://images.unsplash.com/photo-1496307653780-3aee7d846c7c?w=600&auto=format&fit=crop&q=60",
+            "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600&auto=format&fit=crop&q=60",
+            "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=60"
+        ],
+        "Business": [
+            "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&auto=format&fit=crop&q=60",
+            "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=600&auto=format&fit=crop&q=60",
+            "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?w=600&auto=format&fit=crop&q=60",
+            "https://images.unsplash.com/photo-1444653300606-167ebb7f90e6?w=600&auto=format&fit=crop&q=60"
+        ],
+        "Science": [
+            "https://images.unsplash.com/photo-1507668077129-56e32842fceb?w=600&auto=format&fit=crop&q=60",
+            "https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=600&auto=format&fit=crop&q=60",
+            "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=60"
+        ],
+        "Health": [
+            "https://images.unsplash.com/photo-1505751172876-fa1923c5c528?w=600&auto=format&fit=crop&q=60",
+            "https://images.unsplash.com/photo-1530026405186-ed1ea0ac7a63?w=600&auto=format&fit=crop&q=60",
+            "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=600&auto=format&fit=crop&q=60"
+        ],
+        "Astrology": [
+            "https://images.unsplash.com/photo-1506318137071-a8e063b4bec0?w=600&auto=format&fit=crop&q=60",
+            "https://images.unsplash.com/photo-1532960401447-7dd05bef20b0?w=600&auto=format&fit=crop&q=60",
+            "https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=600&auto=format&fit=crop&q=60"
+        ],
+        "World": [
+            "https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?w=600&auto=format&fit=crop&q=60",
+            "https://images.unsplash.com/photo-1508847154043-be12a62861c1?w=600&auto=format&fit=crop&q=60",
+            "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop&q=60"
+        ]
+    }
+    fallback_images = category_images_db.get(category, category_images_db["Technology"])
+
     try:
         req = urllib.request.Request(
             url, 
@@ -449,7 +486,7 @@ def fetch_custom_news(q: str = "", category: str = "Technology", country: str = 
                     image_url = img_match.group(1)
             
             if not image_url:
-                image_url = tech_images[idx % len(tech_images)]
+                image_url = fallback_images[idx % len(fallback_images)]
                 
             pub_date = item.find('pubDate').text if item.find('pubDate') is not None else ""
             
@@ -486,6 +523,59 @@ def get_news_detail(news_id: str):
     if news_id in cached_news_db:
         return cached_news_db[news_id]
     return {"status": "error", "message": "News item not found"}
+
+@app.get("/api/news/{news_id}/summary")
+async def get_news_summary(news_id: str):
+    global cached_news_db
+    if news_id not in cached_news_db:
+        return {"status": "error", "message": "News item not found"}
+        
+    item = cached_news_db[news_id]
+    title = item.get("title", "")
+    description = item.get("description", "")
+    
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return {
+            "status": "ok",
+            "summary": f"💡 **Offline Summary Mode (Set GEMINI_API_KEY to unlock AI):**\nThis article '{title}' reports: {description}"
+        }
+        
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    headers = {"Content-Type": "application/json"}
+    
+    prompt = (
+        f"Analyze this news article. Provide a concise, engaging summary in exactly 3 bullet points with emojis. "
+        f"Format using Markdown.\n\n"
+        f"Title: {title}\n"
+        f"Description: {description}\n"
+        f"Summary:"
+    )
+    
+    data = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }]
+    }
+    
+    try:
+        req = urllib.request.Request(
+            url, 
+            data=json.dumps(data).encode("utf-8"), 
+            headers=headers, 
+            method="POST"
+        )
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(None, lambda: urllib.request.urlopen(req, timeout=10).read())
+        res_json = json.loads(response.decode("utf-8"))
+        summary_text = res_json["candidates"][0]["content"]["parts"][0]["text"]
+        return {"status": "ok", "summary": summary_text}
+    except Exception as e:
+        print(f"Gemini Summary API error: {e}")
+        return {
+            "status": "ok",
+            "summary": f"📋 **Summary:** {description}"
+        }
 
 @app.post("/api/news/{news_id}/like")
 def like_news(news_id: str):
