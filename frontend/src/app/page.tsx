@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 
 interface ChatMessage {
   type: "message" | "system";
@@ -47,14 +48,17 @@ export default function GroupChat() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [socketConnected, setSocketConnected] = useState(false);
 
-  // News feed states
-  const [showNews, setShowNews] = useState(true);
-  const [news, setNews] = useState<NewsItem[]>([]);
-  const [activeCommentBox, setActiveCommentBox] = useState<string | null>(null);
-  const [commentInput, setCommentInput] = useState("");
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
-
   const socketRef = useRef<WebSocket | null>(null);
+
+  // Load saved handle and room from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedUser = localStorage.getItem("synapse_username");
+      const savedRoom = localStorage.getItem("synapse_room");
+      if (savedUser) setUsername(savedUser);
+      if (savedRoom) setRoom(savedRoom);
+    }
+  }, []);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isTypingRef = useRef(false);
@@ -91,87 +95,6 @@ export default function GroupChat() {
     };
   }, []);
 
-  // Load news when joined or server URL changes
-  useEffect(() => {
-    if (joined) {
-      loadNews();
-    }
-  }, [joined, serverUrl]);
-
-  const getHttpUrl = (path: string) => {
-    try {
-      const url = new URL(serverUrl);
-      const protocol = url.protocol === "wss:" ? "https:" : "http:";
-      return `${protocol}//${url.host}${path}`;
-    } catch {
-      return "";
-    }
-  };
-
-  const loadNews = async () => {
-    const url = getHttpUrl("/api/news");
-    if (!url) return;
-    try {
-      const res = await fetch(url);
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setNews(data);
-      }
-    } catch (err) {
-      console.error("Error loading news:", err);
-    }
-  };
-
-  const handleLikeNews = async (id: string) => {
-    const url = getHttpUrl(`/api/news/${id}/like`);
-    if (!url) return;
-    try {
-      const res = await fetch(url, { method: "POST" });
-      const data = await res.json();
-      if (data.status === "ok") {
-        setNews((prev) =>
-          prev.map((item) => (item.id === id ? { ...item, likes: data.likes } : item))
-        );
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleAddComment = async (e: React.FormEvent, id: string) => {
-    e.preventDefault();
-    const text = commentInput.trim();
-    if (!text) return;
-    const url = getHttpUrl(`/api/news/${id}/comment`);
-    if (!url) return;
-    try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, username }),
-      });
-      const data = await res.json();
-      if (data.status === "ok") {
-        setNews((prev) =>
-          prev.map((item) =>
-            item.id === id
-              ? { ...item, comments: [...item.comments, data.comment] }
-              : item
-          )
-        );
-        setCommentInput("");
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleShareNews = (link: string) => {
-    navigator.clipboard.writeText(link);
-    setToastMsg("Link copied to clipboard!");
-    setTimeout(() => setToastMsg(null), 3000);
-  };
-
   // Connect to websocket server
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -206,6 +129,10 @@ export default function GroupChat() {
           })
         );
         setJoined(true);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("synapse_username", finalUsername);
+          localStorage.setItem("synapse_room", finalRoom);
+        }
       };
 
       ws.onmessage = (event) => {
@@ -492,13 +419,18 @@ export default function GroupChat() {
         <div className="chat-dashboard glass-card">
           {/* Sidebar */}
           <div className="chat-sidebar">
-            <div className="sidebar-header">
-              <div className="app-badge">
-                <svg viewBox="0 0 24 24">
-                  <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z" />
-                </svg>
+            <div className="sidebar-header" style={{ justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div className="app-badge">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z" />
+                  </svg>
+                </div>
+                <span className="app-name">Synapse</span>
               </div>
-              <span className="app-name">Synapse</span>
+              <Link href="/news" className="header-icon-link" title="Tech News Feed">
+                📰
+              </Link>
             </div>
 
             <div className="sidebar-section">
@@ -558,13 +490,14 @@ export default function GroupChat() {
                   <span>{users.length} users active in room</span>
                 </div>
               </div>
-              <button 
-                className={`news-toggle-btn ${showNews ? "active" : ""}`} 
-                onClick={() => setShowNews(!showNews)}
-                title="Toggle tech news"
+              <Link 
+                href="/news"
+                className="news-toggle-btn active"
+                title="View tech news feed"
+                style={{ textDecoration: "none" }}
               >
-                📰 {showNews ? "Hide News" : "Show News"}
-              </button>
+                📰 Tech News
+              </Link>
             </div>
 
             {/* Messages */}
@@ -656,83 +589,6 @@ export default function GroupChat() {
               </div>
             </form>
           </div>
-
-          {/* News Panel */}
-          {showNews && (
-            <div className="chat-news">
-              <div className="news-header">
-                <h3>Trending Tech News</h3>
-                <button className="refresh-news-btn" onClick={loadNews} title="Refresh news">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                  </svg>
-                </button>
-              </div>
-              <div className="news-list">
-                {news.map((item) => (
-                  <div key={item.id} className="news-card">
-                    {item.imageUrl && (
-                      <div className="news-card-image">
-                        <img src={item.imageUrl} alt={item.title} />
-                      </div>
-                    )}
-                    <div className="news-card-content">
-                      <h4 className="news-card-title">
-                        <a href={item.link} target="_blank" rel="noopener noreferrer">
-                          {item.title}
-                        </a>
-                      </h4>
-                      <p className="news-card-desc">{item.description}</p>
-                      
-                      {/* Actions */}
-                      <div className="news-card-actions">
-                        <button className="action-btn like" onClick={() => handleLikeNews(item.id)}>
-                          <span>❤️</span> {item.likes}
-                        </button>
-                        <button className="action-btn comment" onClick={() => setActiveCommentBox(activeCommentBox === item.id ? null : item.id)}>
-                          <span>💬</span> {item.comments.length}
-                        </button>
-                        <button className="action-btn share" onClick={() => handleShareNews(item.link)}>
-                          <span>📤</span> Share
-                        </button>
-                      </div>
-                      
-                      {/* Comments section */}
-                      {activeCommentBox === item.id && (
-                        <div className="news-comments-section">
-                          <div className="comments-list">
-                            {item.comments.map((c, i) => (
-                              <div key={i} className="comment-item">
-                                <span className="comment-author">{c.author}:</span>
-                                <span className="comment-text">{c.text}</span>
-                              </div>
-                            ))}
-                          </div>
-                          <form onSubmit={(e) => handleAddComment(e, item.id)} className="comment-form">
-                            <input
-                              type="text"
-                              placeholder="Write a comment..."
-                              value={commentInput}
-                              onChange={(e) => setCommentInput(e.target.value)}
-                              required
-                            />
-                            <button type="submit">Send</button>
-                          </form>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Toast Notification */}
-      {toastMsg && (
-        <div className="toast-notification">
-          <span>{toastMsg}</span>
         </div>
       )}
     </div>
