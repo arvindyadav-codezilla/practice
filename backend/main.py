@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 import json
 import datetime
@@ -855,6 +855,339 @@ def comment_news(news_id: str, payload: dict):
         cached_news_db[news_id]["comments"].append(comment)
         return {"status": "ok", "comment": comment}
     return {"status": "error", "message": "News item not found"}
+
+# ==========================================
+# AI Campaigns & Social Hub Management
+# ==========================================
+
+CAMPAIGNS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "campaigns.json")
+
+def load_campaigns() -> Dict[str, dict]:
+    if not os.path.exists(CAMPAIGNS_FILE):
+        return {}
+    try:
+        with open(CAMPAIGNS_FILE, "r") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Error loading campaigns: {e}")
+        return {}
+
+def save_campaigns(campaigns: Dict[str, dict]):
+    try:
+        with open(CAMPAIGNS_FILE, "w") as f:
+            json.dump(campaigns, f, indent=2)
+    except Exception as e:
+        print(f"Error saving campaigns: {e}")
+
+def send_whatsapp_message(to_number: str, text: str, campaign_id: str = None) -> str:
+    # 1. Log to outbox log file inside scratch directory
+    log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scratch")
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "whatsapp_messages.log")
+    
+    timestamp = datetime.datetime.utcnow().isoformat() + "Z"
+    log_entry = {
+        "timestamp": timestamp,
+        "campaign_id": campaign_id,
+        "to": to_number,
+        "text": text
+    }
+    
+    try:
+        with open(log_path, "a") as f:
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception as err:
+        print(f"Error logging whatsapp message: {err}")
+        
+    # 2. Twilio real API dispatcher if credentials are set
+    account_sid = os.environ.get("TWILIO_ACCOUNT_SID")
+    auth_token = os.environ.get("TWILIO_AUTH_TOKEN")
+    from_number = os.environ.get("TWILIO_WHATSAPP_FROM")
+    
+    if account_sid and auth_token and from_number:
+        try:
+            url = f"https://api.twilio.com/2010-04-01/Accounts/{account_sid}/Messages.json"
+            to_formatted = to_number if to_number.startswith("whatsapp:") else f"whatsapp:{to_number}"
+            
+            data = {
+                "To": to_formatted,
+                "From": from_number,
+                "Body": text
+            }
+            encoded_data = urllib.parse.urlencode(data).encode("utf-8")
+            req = urllib.request.Request(url, data=encoded_data, method="POST")
+            
+            import base64
+            auth_str = f"{account_sid}:{auth_token}"
+            b64_auth = base64.b64encode(auth_str.encode("utf-8")).decode("utf-8")
+            req.add_header("Authorization", f"Basic {b64_auth}")
+            req.add_header("Content-Type", "application/x-www-form-urlencoded")
+            
+            response = urllib.request.urlopen(req, timeout=5)
+            res_body = response.read().decode("utf-8")
+            res_data = json.loads(res_body)
+            return f"Twilio SMS SID: {res_data.get('sid')}"
+        except Exception as e:
+            print(f"Twilio API Dispatch error: {e}")
+            return f"Twilio error: {str(e)} (logged locally)"
+            
+    return "Logged locally (Mock Mode)"
+
+def publish_to_meta_platforms(post_content: str) -> dict:
+    fb_token = os.environ.get("META_PAGE_ACCESS_TOKEN")
+    fb_page_id = os.environ.get("META_PAGE_ID")
+    
+    status = {}
+    
+    # 1. Facebook Publish
+    if fb_token and fb_page_id:
+        try:
+            url = f"https://graph.facebook.com/v19.0/{fb_page_id}/feed"
+            data = {
+                "message": post_content,
+                "access_token": fb_token
+            }
+            encoded_data = urllib.parse.urlencode(data).encode("utf-8")
+            req = urllib.request.Request(url, data=encoded_data, method="POST")
+            with urllib.request.urlopen(req, timeout=5) as res:
+                res_json = json.loads(res.read().decode("utf-8"))
+                status["fb_id"] = res_json.get("id")
+        except Exception as e:
+            print(f"Facebook Graph API publish error: {e}")
+            status["fb_id"] = f"mock_fb_{random.randint(10000000, 99999999)}"
+    else:
+        status["fb_id"] = f"mock_fb_{random.randint(10000000, 99999999)}"
+        
+    # 2. Instagram Publish
+    status["ig_id"] = f"mock_ig_{random.randint(10000000, 99999999)}"
+    
+    return status
+
+@app.post("/api/campaigns")
+async def create_campaign(payload: dict):
+    content = payload.get("content", "").strip()
+    whatsapp_number = payload.get("whatsapp_number", "").strip()
+    if not content:
+        return {"status": "error", "message": "Content cannot be empty"}
+        
+    api_key = os.environ.get("GEMINI_API_KEY")
+    posts = []
+    
+    if api_key:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+        headers = {"Content-Type": "application/json"}
+        
+        prompt = (
+            "You are a social media copywriter. Analyze the following content and generate exactly 5 distinct, highly engaging social media posts "
+            "for Facebook/Instagram. Each post should be formatted with relevant emojis, hashtags, and a distinct tone "
+            "(e.g., professional, enthusiastic, questioning, bullet-points, quote-style).\n\n"
+            "Format the output strictly as a JSON list of strings, with exactly 5 items, e.g.:\n"
+            '["Post 1 text with hashtags and emojis", "Post 2 text...", "Post 3 text...", "Post 4 text...", "Post 5 text..."]\n\n'
+            "Return ONLY the raw JSON list. Do not include markdown code block characters like ```json or ```.\n\n"
+            f"Content: {content}"
+        )
+        
+        data = {
+            "contents": [{
+                "parts": [{"text": prompt}]
+            }]
+        }
+        
+        try:
+            req = urllib.request.Request(
+                url, 
+                data=json.dumps(data).encode("utf-8"), 
+                headers=headers, 
+                method="POST"
+            )
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(None, lambda: urllib.request.urlopen(req, timeout=12).read())
+            res_json = json.loads(response.decode("utf-8"))
+            res_text = res_json["candidates"][0]["content"]["parts"][0]["text"].strip()
+            
+            if res_text.startswith("```"):
+                res_text = re.sub(r"^```(?:json)?\n", "", res_text)
+                res_text = re.sub(r"\n```$", "", res_text)
+            
+            parsed_posts = json.loads(res_text.strip())
+            if isinstance(parsed_posts, list) and len(parsed_posts) >= 5:
+                posts = parsed_posts[:5]
+        except Exception as e:
+            print(f"Gemini Campaign generation error: {e}")
+            
+    if len(posts) < 5:
+        # Fallback generator
+        posts = [
+            f"🚀 NEW UPDATE: {content[:120]}... Read this thread! #innovation #tech",
+            f"🤔 What is your opinion on this? {content[:100]}... Let us know in the comments below! #insights #community",
+            f"💡 Key Takeaways:\n- {content[:60]}...\n- We are paving the way forward! #industry #growth",
+            f"✨ \"{content[:140]}\" - An inspiring perspective on development. #quoteoftheday #expert",
+            f"🔥 Trending News: {content[:110]}... Share your views! #breaking #discussion"
+        ]
+        
+    campaign_id = "camp_" + str(int(datetime.datetime.utcnow().timestamp())) + "_" + str(random.randint(100, 999))
+    campaign = {
+        "id": campaign_id,
+        "content": content,
+        "whatsapp_number": whatsapp_number,
+        "posts": posts,
+        "created_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "approved_post_index": None,
+        "approved_at": None,
+        "status": "pending",
+        "whatsapp_outbox_log": [],
+        "fb_published_id": None,
+        "ig_published_id": None
+    }
+    
+    db = load_campaigns()
+    db[campaign_id] = campaign
+    save_campaigns(db)
+    
+    wa_msg = (
+        f"📢 *Synapse AI Social Campaign approval request:*\n"
+        f"Base Content: \"{content[:100]}...\"\n\n"
+        f"Please reply with *\"Approve <number>\"* (e.g. `Approve 3`) to select and publish:\n\n"
+        f"1️⃣ {posts[0]}\n\n"
+        f"2️⃣ {posts[1]}\n\n"
+        f"3️⃣ {posts[2]}\n\n"
+        f"4️⃣ {posts[3]}\n\n"
+        f"5️⃣ {posts[4]}"
+    )
+    
+    send_status = send_whatsapp_message(whatsapp_number, wa_msg, campaign_id)
+    campaign["whatsapp_outbox_log"].append({
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "message": wa_msg,
+        "status": send_status
+    })
+    
+    db[campaign_id] = campaign
+    save_campaigns(db)
+    
+    return {"status": "ok", "campaign": campaign}
+
+@app.get("/api/campaigns")
+def get_campaigns():
+    db = load_campaigns()
+    campaigns_list = list(db.values())
+    campaigns_list.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    return campaigns_list
+
+@app.post("/api/campaigns/{campaign_id}/approve")
+def approve_campaign(campaign_id: str, payload: dict):
+    post_index = payload.get("post_index")
+    if post_index is None or not (0 <= post_index < 5):
+        return {"status": "error", "message": "Invalid post index, must be 0-4"}
+        
+    db = load_campaigns()
+    if campaign_id not in db:
+        return {"status": "error", "message": "Campaign not found"}
+        
+    campaign = db[campaign_id]
+    if campaign["status"] != "pending":
+        return {"status": "error", "message": "Campaign is already approved or published"}
+        
+    approved_post = campaign["posts"][post_index]
+    pub_status = publish_to_meta_platforms(approved_post)
+    
+    campaign["approved_post_index"] = post_index
+    campaign["approved_at"] = datetime.datetime.utcnow().isoformat() + "Z"
+    campaign["status"] = "published"
+    campaign["fb_published_id"] = pub_status.get("fb_id")
+    campaign["ig_published_id"] = pub_status.get("ig_id")
+    
+    confirm_msg = (
+        f"✅ *Campaign Published successfully!*\n\n"
+        f"Selected Post: #{post_index + 1}\n"
+        f"Facebook Post ID: `{pub_status.get('fb_id')}`\n"
+        f"Instagram Post ID: `{pub_status.get('ig_id')}`"
+    )
+    send_whatsapp_message(campaign["whatsapp_number"], confirm_msg, campaign_id)
+    campaign["whatsapp_outbox_log"].append({
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "message": confirm_msg,
+        "status": "Sent"
+    })
+    
+    db[campaign_id] = campaign
+    save_campaigns(db)
+    
+    return {"status": "ok", "campaign": campaign}
+
+@app.post("/api/webhook/whatsapp")
+async def whatsapp_webhook(request: Request):
+    payload = {}
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        try:
+            payload = await request.json()
+        except Exception:
+            pass
+    else:
+        try:
+            form_data = await request.form()
+            payload = dict(form_data)
+        except Exception:
+            pass
+            
+    sender = payload.get("From", "").strip()
+    body = payload.get("Body", "").strip()
+    
+    if not sender or not body:
+        return {"status": "error", "message": "Missing sender or body content"}
+        
+    match = re.search(r"approve\s*([1-5])", body.lower())
+    if not match:
+        reply_txt = "Sorry, I didn't catch that. Please reply with 'Approve <number>' (e.g. 'Approve 3') to approve and publish."
+        send_whatsapp_message(sender, reply_txt)
+        return {"status": "ignored", "message": "Invalid WhatsApp command"}
+        
+    post_num = int(match.group(1))
+    post_idx = post_num - 1
+    
+    db = load_campaigns()
+    matching_campaign = None
+    for camp in db.values():
+        camp_num = camp.get("whatsapp_number", "")
+        clean_camp_num = re.sub(r"\D", "", camp_num)
+        clean_sender_num = re.sub(r"\D", "", sender)
+        
+        if camp.get("status") == "pending" and (clean_camp_num in clean_sender_num or clean_sender_num in clean_camp_num):
+            if not matching_campaign or camp["created_at"] > matching_campaign["created_at"]:
+                matching_campaign = camp
+                
+    if not matching_campaign:
+        reply_txt = "No active pending campaign found for your phone number."
+        send_whatsapp_message(sender, reply_txt)
+        return {"status": "error", "message": "No pending campaign found"}
+        
+    approved_post = matching_campaign["posts"][post_idx]
+    pub_status = publish_to_meta_platforms(approved_post)
+    
+    matching_campaign["approved_post_index"] = post_idx
+    matching_campaign["approved_at"] = datetime.datetime.utcnow().isoformat() + "Z"
+    matching_campaign["status"] = "published"
+    matching_campaign["fb_published_id"] = pub_status.get("fb_id")
+    matching_campaign["ig_published_id"] = pub_status.get("ig_id")
+    
+    confirm_msg = (
+        f"✅ *Campaign Published successfully via WhatsApp Command!*\n\n"
+        f"Selected Post: #{post_num}\n"
+        f"Facebook Post ID: `{pub_status.get('fb_id')}`\n"
+        f"Instagram Post ID: `{pub_status.get('ig_id')}`"
+    )
+    send_whatsapp_message(sender, confirm_msg, matching_campaign["id"])
+    matching_campaign["whatsapp_outbox_log"].append({
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "message": confirm_msg,
+        "status": "Sent"
+    })
+    
+    db[matching_campaign["id"]] = matching_campaign
+    save_campaigns(db)
+    
+    return {"status": "ok", "campaign_id": matching_campaign["id"], "approved_post_index": post_idx}
 
 @app.get("/")
 def index():

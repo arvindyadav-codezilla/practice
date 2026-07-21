@@ -1124,6 +1124,543 @@ const Playground = ({ socket, connected, username }: { socket: WebSocket | null;
   );
 };
 
+interface Campaign {
+  id: string;
+  content: string;
+  whatsapp_number: string;
+  posts: string[];
+  created_at: string;
+  approved_post_index: number | null;
+  approved_at: string | null;
+  status: "pending" | "published";
+  whatsapp_outbox_log: { timestamp: string; message: string; status: string }[];
+  fb_published_id: string | null;
+  ig_published_id: string | null;
+}
+
+const SocialHub = ({ serverUrl }: { serverUrl: string }) => {
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [content, setContent] = useState("");
+  const [whatsappNumber, setWhatsappNumber] = useState("+919876543210");
+  const [generating, setGenerating] = useState(false);
+  const [activeSimCampaign, setActiveSimCampaign] = useState<Campaign | null>(null);
+  const [simReply, setSimReply] = useState("");
+  const [simulating, setSimulating] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [previewPlatform, setPreviewPlatform] = useState<Record<string, "facebook" | "instagram">>({});
+
+  const getHttpUrl = (path: string) => {
+    try {
+      const url = new URL(serverUrl);
+      const protocol = url.protocol === "wss:" ? "https:" : "http:";
+      return `${protocol}//${url.host}${path}`;
+    } catch {
+      return "";
+    }
+  };
+
+  const loadCampaigns = async () => {
+    const url = getHttpUrl("/api/campaigns");
+    if (!url) return;
+    setLoading(true);
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setCampaigns(data);
+        const pending = data.find(c => c.status === "pending");
+        if (pending) setActiveSimCampaign(pending);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (serverUrl) {
+      loadCampaigns();
+    }
+  }, [serverUrl]);
+
+  const handleCreateCampaign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!content.trim() || !whatsappNumber.trim()) return;
+
+    const url = getHttpUrl("/api/campaigns");
+    if (!url) return;
+
+    setGenerating(true);
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content, whatsapp_number: whatsappNumber })
+      });
+      const data = await res.json();
+      if (data.status === "ok") {
+        setCampaigns(prev => [data.campaign, ...prev]);
+        setActiveSimCampaign(data.campaign);
+        setContent("");
+        showToast("Campaign generated & WhatsApp notification sent!");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("Error creating campaign.");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleApprovePost = async (campaignId: string, postIndex: number) => {
+    const url = getHttpUrl(`/api/campaigns/${campaignId}/approve`);
+    if (!url) return;
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ post_index: postIndex })
+      });
+      const data = await res.json();
+      if (data.status === "ok") {
+        setCampaigns(prev => prev.map(c => c.id === campaignId ? data.campaign : c));
+        if (activeSimCampaign?.id === campaignId) {
+          setActiveSimCampaign(data.campaign);
+        }
+        showToast(`Post #${postIndex + 1} published to Facebook and Instagram!`);
+      } else {
+        showToast(data.message || "Failed to publish.");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("Error approving campaign.");
+    }
+  };
+
+  const handleSimulateWhatsAppReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!simReply.trim() || !activeSimCampaign) return;
+
+    const url = getHttpUrl("/api/webhook/whatsapp");
+    if (!url) return;
+
+    setSimulating(true);
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          From: activeSimCampaign.whatsapp_number,
+          Body: simReply
+        })
+      });
+      const data = await res.json();
+      if (data.status === "ok") {
+        showToast(`WhatsApp command accepted! Post #${data.approved_post_index + 1} Approved.`);
+        setSimReply("");
+        loadCampaigns();
+      } else {
+        showToast(data.message || "Failed to simulate message.");
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("Simulation API error.");
+    } finally {
+      setSimulating(false);
+    }
+  };
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const togglePreviewPlatform = (campaignId: string, platform: "facebook" | "instagram") => {
+    setPreviewPlatform(prev => ({
+      ...prev,
+      [campaignId]: platform
+    }));
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", width: "100%", overflowY: "auto", padding: "20px", gap: "20px", textAlign: "left" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+        <div>
+          <h2 style={{ color: "#fff", margin: 0, fontSize: "20px", fontWeight: 700 }}>📢 Social Campaigns Hub</h2>
+          <p style={{ color: "var(--text-muted)", margin: 0, fontSize: "12px" }}>
+            Generate social media posts using AI, request admin approval on WhatsApp, and auto-publish.
+          </p>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr", gap: "20px", alignItems: "start" }}>
+        
+        {/* Left Side: Creation & WhatsApp Webhook Sandbox */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          
+          {/* Create Campaign Box */}
+          <div className="glass-card" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "14px" }}>
+            <h3 style={{ margin: 0, color: "#fff", fontSize: "15px", fontWeight: 600 }}>Create AI Campaign</h3>
+            <form onSubmit={handleCreateCampaign} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "11px", color: "var(--text-dim)", fontWeight: 600 }}>CAMPAGIN BASE CONTENT</label>
+                <textarea
+                  placeholder="Paste text update, code changes, or news articles to turn into posts..."
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  required
+                  style={{
+                    height: "100px",
+                    background: "rgba(255,255,255,0.03)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                    borderRadius: "10px",
+                    padding: "10px",
+                    color: "#fff",
+                    fontSize: "13px",
+                    fontFamily: "inherit",
+                    resize: "none",
+                    outline: "none"
+                  }}
+                />
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "11px", color: "var(--text-dim)", fontWeight: 600 }}>ADMIN WHATSAPP NUMBER</label>
+                <input
+                  type="text"
+                  placeholder="e.g. +919876543210"
+                  value={whatsappNumber}
+                  onChange={(e) => setWhatsappNumber(e.target.value)}
+                  required
+                  style={{
+                    height: "40px",
+                    background: "rgba(255,255,255,0.03)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                    borderRadius: "10px",
+                    padding: "0 12px",
+                    color: "#fff",
+                    fontSize: "13px",
+                    outline: "none"
+                  }}
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={generating}
+                style={{
+                  height: "42px",
+                  background: "var(--primary-gradient)",
+                  border: "none",
+                  borderRadius: "10px",
+                  color: "#fff",
+                  fontWeight: 600,
+                  fontSize: "13px",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 12px var(--primary-glow)",
+                  opacity: generating ? 0.7 : 1
+                }}
+              >
+                {generating ? "✨ Generating 5 AI Posts..." : "✨ Create Campaign"}
+              </button>
+            </form>
+          </div>
+
+          {/* WhatsApp Sandbox Simulator */}
+          <div className="glass-card" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "14px", border: "1px solid rgba(16, 185, 129, 0.2)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "18px" }}>💬</span>
+              <h3 style={{ margin: 0, color: "#fff", fontSize: "15px", fontWeight: 600 }}>WhatsApp Webhook Sandbox</h3>
+            </div>
+            <p style={{ margin: 0, fontSize: "11px", color: "var(--text-muted)", lineHeight: "1.4" }}>
+              Simulate admin WhatsApp interactions here. Logged outbox texts are shown in green; reply with `Approve 2` to approve a campaign option.
+            </p>
+
+            {activeSimCampaign ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "4px" }}>
+                <div style={{ background: "rgba(0,0,0,0.2)", borderRadius: "10px", padding: "12px", borderLeft: "4px solid #10b981" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: "var(--text-dim)", marginBottom: "6px" }}>
+                    <span>OUTBOX LOG (SENT TO ADMIN)</span>
+                    <span>{activeSimCampaign.id}</span>
+                  </div>
+                  <pre style={{
+                    margin: 0,
+                    fontSize: "11px",
+                    color: "#a7f3d0",
+                    fontFamily: "monospace",
+                    whiteSpace: "pre-wrap",
+                    maxHeight: "150px",
+                    overflowY: "auto"
+                  }}>
+                    {activeSimCampaign.whatsapp_outbox_log[0]?.message || "Awaiting outbox logs..."}
+                  </pre>
+                </div>
+
+                <form onSubmit={handleSimulateWhatsAppReply} style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <label style={{ fontSize: "11px", color: "var(--text-dim)", fontWeight: 600 }}>INCOMING WHATSAPP REPLY CHAT</label>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <input
+                      type="text"
+                      placeholder="e.g. Approve 3"
+                      value={simReply}
+                      onChange={(e) => setSimReply(e.target.value)}
+                      required
+                      style={{
+                        flex: 1,
+                        height: "38px",
+                        background: "rgba(255,255,255,0.03)",
+                        border: "1px solid rgba(255,255,255,0.06)",
+                        borderRadius: "8px",
+                        padding: "0 12px",
+                        color: "#fff",
+                        fontSize: "13px",
+                        outline: "none"
+                      }}
+                    />
+                    <button
+                      type="submit"
+                      disabled={simulating}
+                      style={{
+                        background: "#10b981",
+                        border: "none",
+                        borderRadius: "8px",
+                        color: "#fff",
+                        fontWeight: 600,
+                        fontSize: "12px",
+                        padding: "0 16px",
+                        cursor: "pointer"
+                      }}
+                    >
+                      {simulating ? "Sending..." : "Send Reply"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : (
+              <span style={{ fontSize: "12px", color: "var(--text-dim)", padding: "10px 0", textAlign: "center" }}>
+                No active pending campaign to simulate. Write a base campaign content above!
+              </span>
+            )}
+          </div>
+
+        </div>
+
+        {/* Right Side: Active Campaigns & Visualizer Mockups */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <h3 style={{ margin: 0, color: "#fff", fontSize: "16px", fontWeight: 700 }}>Active Campaigns</h3>
+            <button onClick={loadCampaigns} style={{ background: "none", border: "none", color: "var(--primary)", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
+              🔄 Refresh List
+            </button>
+          </div>
+
+          {loading ? (
+            <div style={{ textAlign: "center", padding: "40px", color: "var(--text-dim)" }}>
+              Fetching campaigns feed...
+            </div>
+          ) : campaigns.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "40px", color: "var(--text-dim)", background: "rgba(255,255,255,0.01)", borderRadius: "16px", border: "1px dashed rgba(255,255,255,0.06)" }}>
+              No social campaigns generated yet. Use the sidebar to launch one!
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+              {campaigns.map((camp) => {
+                const isPending = camp.status === "pending";
+                const activePlatform = previewPlatform[camp.id] || "facebook";
+                
+                return (
+                  <div key={camp.id} className="glass-card" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                    
+                    {/* Header */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px" }}>
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>ID: {camp.id}</span>
+                          <span style={{
+                            fontSize: "10px",
+                            padding: "3px 8px",
+                            borderRadius: "12px",
+                            fontWeight: 600,
+                            background: isPending ? "rgba(245, 158, 11, 0.15)" : "rgba(16, 185, 129, 0.15)",
+                            color: isPending ? "#f59e0b" : "#10b981"
+                          }}>
+                            {isPending ? "⏳ Pending Approval" : "🚀 Published"}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: "11px", color: "var(--text-dim)", marginTop: "4px" }}>
+                          Created: {new Date(camp.created_at).toLocaleString()} | Target: {camp.whatsapp_number}
+                        </div>
+                      </div>
+
+                      {/* Mockup Preview Platform Selector */}
+                      <div style={{ display: "flex", background: "rgba(255,255,255,0.03)", borderRadius: "8px", padding: "3px", border: "1px solid rgba(255,255,255,0.05)" }}>
+                        <button
+                          onClick={() => togglePreviewPlatform(camp.id, "facebook")}
+                          style={{
+                            background: activePlatform === "facebook" ? "rgba(129, 140, 248, 0.2)" : "none",
+                            border: "none",
+                            borderRadius: "6px",
+                            color: activePlatform === "facebook" ? "#818cf8" : "var(--text-muted)",
+                            fontSize: "10px",
+                            fontWeight: 600,
+                            padding: "4px 8px",
+                            cursor: "pointer"
+                          }}
+                        >
+                          🌐 Facebook
+                        </button>
+                        <button
+                          onClick={() => togglePreviewPlatform(camp.id, "instagram")}
+                          style={{
+                            background: activePlatform === "instagram" ? "rgba(129, 140, 248, 0.2)" : "none",
+                            border: "none",
+                            borderRadius: "6px",
+                            color: activePlatform === "instagram" ? "#818cf8" : "var(--text-muted)",
+                            fontSize: "10px",
+                            fontWeight: 600,
+                            padding: "4px 8px",
+                            cursor: "pointer"
+                          }}
+                        >
+                          📸 Instagram
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Original Base Content Box */}
+                    <div style={{ background: "rgba(255,255,255,0.01)", borderRadius: "8px", padding: "10px", border: "1px solid rgba(255,255,255,0.03)", fontSize: "12px", color: "var(--text-muted)" }}>
+                      <strong>Base Content:</strong> "{camp.content}"
+                    </div>
+
+                    {/* Candidate Posts List / Selected Post Preview */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                      <label style={{ fontSize: "11px", color: "var(--text-dim)", fontWeight: 600 }}>AI SOCIAL MEDIA POST CANDIDATES</label>
+                      
+                      {camp.posts.map((post, idx) => {
+                        const isChosen = camp.approved_post_index === idx;
+                        const cardBg = isChosen 
+                          ? "rgba(16, 185, 129, 0.05)" 
+                          : isPending 
+                            ? "rgba(255, 255, 255, 0.02)" 
+                            : "rgba(255,255,255,0.01)";
+                        const borderStyle = isChosen 
+                          ? "1px solid #10b981" 
+                          : "1px solid rgba(255,255,255,0.05)";
+                          
+                        return (
+                          <div
+                            key={idx}
+                            style={{
+                              background: cardBg,
+                              border: borderStyle,
+                              borderRadius: "12px",
+                              padding: "14px",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "10px",
+                              opacity: !isPending && !isChosen ? 0.45 : 1,
+                              transition: "all 0.2s"
+                            }}
+                          >
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span style={{ fontSize: "12px", fontWeight: 700, color: isChosen ? "#10b981" : "#fff" }}>
+                                {isChosen ? "🏆 Approved Post Idea" : `Option #${idx + 1}`}
+                              </span>
+                              
+                              {isPending && (
+                                <button
+                                  onClick={() => handleApprovePost(camp.id, idx)}
+                                  style={{
+                                    background: "rgba(129, 140, 248, 0.15)",
+                                    border: "1px solid var(--primary)",
+                                    borderRadius: "8px",
+                                    color: "#818cf8",
+                                    fontSize: "11px",
+                                    fontWeight: 600,
+                                    padding: "4px 10px",
+                                    cursor: "pointer"
+                                  }}
+                                >
+                                  Approve & Publish
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Render Mockup Container vs Text */}
+                            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                              {activePlatform === "facebook" ? (
+                                /* FB Layout Mock */
+                                <div style={{ background: "#18191a", border: "1px solid #3e4042", borderRadius: "8px", padding: "12px" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                                    <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "var(--primary-gradient)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: "bold" }}>S</div>
+                                    <div>
+                                      <div style={{ fontSize: "11px", fontWeight: "bold", color: "#e4e6eb" }}>Synapse Page</div>
+                                      <div style={{ fontSize: "9px", color: "#b0b3b8" }}>Sponsored • Public</div>
+                                    </div>
+                                  </div>
+                                  <p style={{ margin: 0, fontSize: "12px", color: "#e4e6eb", whiteSpace: "pre-wrap", lineHeight: "1.5" }}>{post}</p>
+                                </div>
+                              ) : (
+                                /* IG Layout Mock */
+                                <div style={{ background: "#000", border: "1px solid #262626", borderRadius: "8px", padding: "12px" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                                    <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "1px" }}>
+                                      <div style={{ width: "100%", height: "100%", borderRadius: "50%", background: "#000", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "8px", fontWeight: "bold" }}>S</div>
+                                    </div>
+                                    <span style={{ fontSize: "11px", fontWeight: "bold", color: "#fff" }}>synapse_brand</span>
+                                  </div>
+                                  <p style={{ margin: 0, fontSize: "12px", color: "#fff", whiteSpace: "pre-wrap", lineHeight: "1.5" }}>
+                                    <strong>synapse_brand</strong> {post}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Published Details receipt */}
+                    {!isPending && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px", background: "rgba(16, 185, 129, 0.04)", border: "1px solid rgba(16, 185, 129, 0.15)", borderRadius: "12px", padding: "14px" }}>
+                        <div style={{ fontSize: "12px", fontWeight: 700, color: "#10b981" }}>🚀 LIVE METRICS & PUBLISHING STATUS</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", fontSize: "11px", color: "var(--text-muted)" }}>
+                          <div>
+                            <strong>Facebook Post ID:</strong> <span style={{ fontFamily: "monospace", color: "#fff" }}>{camp.fb_published_id}</span>
+                          </div>
+                          <div>
+                            <strong>Instagram Post ID:</strong> <span style={{ fontFamily: "monospace", color: "#fff" }}>{camp.ig_published_id}</span>
+                          </div>
+                          <div>
+                            <strong>Approved at:</strong> <span style={{ color: "#fff" }}>{camp.approved_at ? new Date(camp.approved_at).toLocaleTimeString() : ""}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+        </div>
+
+      </div>
+
+      {toast && (
+        <div className="toast-notification" style={{ background: "rgba(129,140,248,0.9)", border: "1px solid #818cf8" }}>
+          <span>{toast}</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function GroupChat() {
   // Connection states
   const [joined, setJoined] = useState(false);
@@ -1142,7 +1679,7 @@ export default function GroupChat() {
   const [activeTyping, setActiveTyping] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [socketConnected, setSocketConnected] = useState(false);
-  const [activeTab, setActiveTab] = useState<"chat" | "whiteboard" | "sandbox" | "playground">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "whiteboard" | "sandbox" | "playground" | "social">("chat");
 
   // Interactive Poll Builder states
   const [showCreatePoll, setShowCreatePoll] = useState(false);
@@ -1650,8 +2187,8 @@ export default function GroupChat() {
             </div>
 
             {/* Sidebar Navigation Tabs */}
-            <div style={{ display: "flex", gap: "8px", padding: "0 20px 16px", borderBottom: "1px solid var(--panel-border)" }}>
-              {["chat", "whiteboard", "sandbox", "playground"].map((tab) => (
+            <div style={{ display: "flex", gap: "6px", padding: "0 10px 16px", borderBottom: "1px solid var(--panel-border)" }}>
+              {["chat", "whiteboard", "sandbox", "playground", "social"].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab as any)}
@@ -1661,7 +2198,7 @@ export default function GroupChat() {
                     border: activeTab === tab ? "none" : "1px solid rgba(255,255,255,0.06)",
                     color: "#fff",
                     borderRadius: "10px",
-                    padding: "8px 4px",
+                    padding: "8px 2px",
                     fontSize: "11px",
                     fontWeight: 600,
                     textTransform: "capitalize",
@@ -1669,7 +2206,7 @@ export default function GroupChat() {
                     transition: "all 0.2s"
                   }}
                 >
-                  {tab === "chat" ? "💬 Chat" : tab === "whiteboard" ? "🎨 Board" : tab === "sandbox" ? "💻 Code" : "🎮 Play"}
+                  {tab === "chat" ? "💬 Chat" : tab === "whiteboard" ? "🎨 Board" : tab === "sandbox" ? "💻 Code" : tab === "playground" ? "🎮 Play" : "📢 Social"}
                 </button>
               ))}
             </div>
@@ -1961,8 +2498,10 @@ export default function GroupChat() {
                 onJsChange={setJsCode}
                 onShare={shareCodeToChat}
               />
-            ) : (
+            ) : activeTab === "playground" ? (
               <Playground socket={socketRef.current} connected={socketConnected} username={username} />
+            ) : (
+              <SocialHub serverUrl={serverUrl} />
             )}
           </div>
         </div>

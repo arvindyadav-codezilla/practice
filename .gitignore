@@ -32,3 +32,7 @@ Thumbs.db
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Data & Logs
+backend/campaigns.json
+scratch/
