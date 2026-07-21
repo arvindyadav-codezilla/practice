@@ -1286,49 +1286,68 @@ const SocialHub = ({ serverUrl }: { serverUrl: string }) => {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", width: "100%", overflowY: "auto", padding: "20px", gap: "20px", textAlign: "left" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", width: "100%", overflowY: "auto", padding: "24px", gap: "24px", textAlign: "left", background: "linear-gradient(180deg, rgba(15, 12, 30, 0.3) 0%, rgba(9, 5, 20, 0.3) 100%)" }}>
+      
+      {/* Header Bar */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px" }}>
         <div>
-          <h2 style={{ color: "#fff", margin: 0, fontSize: "20px", fontWeight: 700 }}>📢 Social Campaigns Hub</h2>
-          <p style={{ color: "var(--text-muted)", margin: 0, fontSize: "12px" }}>
-            Generate social media posts using AI, request admin approval on WhatsApp, and auto-publish.
+          <h2 style={{ color: "#fff", margin: 0, fontSize: "22px", fontWeight: 800, background: "linear-gradient(135deg, #fff 0%, #a855f7 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+            📢 Social Campaigns & Approval Hub
+          </h2>
+          <p style={{ color: "var(--text-muted)", margin: "4px 0 0 0", fontSize: "13px" }}>
+            Turn concepts into production-ready social media posts, verify them on mock platforms, and trigger WhatsApp approval workflows.
           </p>
         </div>
+        <button 
+          onClick={loadCampaigns} 
+          className="news-page-action-btn comment"
+          style={{ padding: "8px 16px", borderRadius: "10px", fontSize: "12px", display: "flex", alignItems: "center", gap: "6px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", cursor: "pointer", color: "#fff" }}
+        >
+          🔄 Refresh Feeds
+        </button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr", gap: "20px", alignItems: "start" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1.6fr", gap: "28px", alignItems: "start" }}>
         
-        {/* Left Side: Creation & WhatsApp Webhook Sandbox */}
-        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+        {/* Left column: Create Panel & Phone Mockup Sandbox */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
           
           {/* Create Campaign Box */}
-          <div className="glass-card" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "14px" }}>
-            <h3 style={{ margin: 0, color: "#fff", fontSize: "15px", fontWeight: 600 }}>Create AI Campaign</h3>
-            <form onSubmit={handleCreateCampaign} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={{ fontSize: "11px", color: "var(--text-dim)", fontWeight: 600 }}>CAMPAGIN BASE CONTENT</label>
+          <div className="glass-card" style={{ padding: "24px", border: "1px solid rgba(255,255,255,0.06)", boxShadow: "0 10px 30px rgba(0, 0, 0, 0.3)", display: "flex", flexDirection: "column", gap: "18px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontSize: "20px" }}>⚡</span>
+              <h3 style={{ margin: 0, color: "#fff", fontSize: "16px", fontWeight: 700 }}>Initialize Campaign</h3>
+            </div>
+            
+            <form onSubmit={handleCreateCampaign} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <label className="form-label" style={{ fontSize: "11px", color: "var(--text-dim)", fontWeight: 700 }}>Source Text / Article</label>
                 <textarea
-                  placeholder="Paste text update, code changes, or news articles to turn into posts..."
+                  placeholder="Paste prompt, technical details, or article text to generate posts..."
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
                   required
                   style={{
-                    height: "100px",
-                    background: "rgba(255,255,255,0.03)",
+                    height: "120px",
+                    background: "rgba(255,255,255,0.02)",
                     border: "1px solid rgba(255,255,255,0.06)",
-                    borderRadius: "10px",
-                    padding: "10px",
+                    borderRadius: "12px",
+                    padding: "12px",
                     color: "#fff",
                     fontSize: "13px",
                     fontFamily: "inherit",
                     resize: "none",
-                    outline: "none"
+                    outline: "none",
+                    lineHeight: "1.5",
+                    transition: "border-color 0.2s"
                   }}
+                  onFocus={(e) => e.target.style.borderColor = "var(--primary)"}
+                  onBlur={(e) => e.target.style.borderColor = "rgba(255,255,255,0.06)"}
                 />
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <label style={{ fontSize: "11px", color: "var(--text-dim)", fontWeight: 600 }}>ADMIN WHATSAPP NUMBER</label>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <label className="form-label" style={{ fontSize: "11px", color: "var(--text-dim)", fontWeight: 700 }}>Admin Notification WhatsApp</label>
                 <input
                   type="text"
                   placeholder="e.g. +919876543210"
@@ -1336,15 +1355,18 @@ const SocialHub = ({ serverUrl }: { serverUrl: string }) => {
                   onChange={(e) => setWhatsappNumber(e.target.value)}
                   required
                   style={{
-                    height: "40px",
-                    background: "rgba(255,255,255,0.03)",
+                    height: "42px",
+                    background: "rgba(255,255,255,0.02)",
                     border: "1px solid rgba(255,255,255,0.06)",
-                    borderRadius: "10px",
-                    padding: "0 12px",
+                    borderRadius: "12px",
+                    padding: "0 14px",
                     color: "#fff",
                     fontSize: "13px",
-                    outline: "none"
+                    outline: "none",
+                    transition: "border-color 0.2s"
                   }}
+                  onFocus={(e) => e.target.style.borderColor = "var(--primary)"}
+                  onBlur={(e) => e.target.style.borderColor = "rgba(255,255,255,0.06)"}
                 />
               </div>
 
@@ -1352,163 +1374,228 @@ const SocialHub = ({ serverUrl }: { serverUrl: string }) => {
                 type="submit"
                 disabled={generating}
                 style={{
-                  height: "42px",
+                  height: "44px",
                   background: "var(--primary-gradient)",
                   border: "none",
-                  borderRadius: "10px",
+                  borderRadius: "12px",
                   color: "#fff",
-                  fontWeight: 600,
+                  fontWeight: 700,
                   fontSize: "13px",
                   cursor: "pointer",
-                  boxShadow: "0 4px 12px var(--primary-glow)",
-                  opacity: generating ? 0.7 : 1
+                  boxShadow: "0 6px 20px var(--primary-glow)",
+                  opacity: generating ? 0.7 : 1,
+                  transition: "all 0.2s"
                 }}
               >
-                {generating ? "✨ Generating 5 AI Posts..." : "✨ Create Campaign"}
+                {generating ? "✨ Generating 5 Custom Posts..." : "🚀 Launch & Send to WhatsApp"}
               </button>
             </form>
           </div>
 
-          {/* WhatsApp Sandbox Simulator */}
-          <div className="glass-card" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "14px", border: "1px solid rgba(16, 185, 129, 0.2)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "18px" }}>💬</span>
-              <h3 style={{ margin: 0, color: "#fff", fontSize: "15px", fontWeight: 600 }}>WhatsApp Webhook Sandbox</h3>
+          {/* WhatsApp Interactive Mockup Phone */}
+          <div style={{
+            background: "#0c1317",
+            borderRadius: "32px",
+            border: "8px solid #2d3134",
+            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
+            height: "450px",
+            position: "relative"
+          }}>
+            {/* Phone Top Notch Speaker */}
+            <div style={{ height: "20px", background: "#2d3134", display: "flex", justifyContent: "center", alignItems: "center" }}>
+              <div style={{ width: "60px", height: "4px", background: "#111", borderRadius: "2px" }} />
             </div>
-            <p style={{ margin: 0, fontSize: "11px", color: "var(--text-muted)", lineHeight: "1.4" }}>
-              Simulate admin WhatsApp interactions here. Logged outbox texts are shown in green; reply with `Approve 2` to approve a campaign option.
-            </p>
 
-            {activeSimCampaign ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "4px" }}>
-                <div style={{ background: "rgba(0,0,0,0.2)", borderRadius: "10px", padding: "12px", borderLeft: "4px solid #10b981" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", color: "var(--text-dim)", marginBottom: "6px" }}>
-                    <span>OUTBOX LOG (SENT TO ADMIN)</span>
-                    <span>{activeSimCampaign.id}</span>
-                  </div>
-                  <pre style={{
-                    margin: 0,
-                    fontSize: "11px",
-                    color: "#a7f3d0",
-                    fontFamily: "monospace",
-                    whiteSpace: "pre-wrap",
-                    maxHeight: "150px",
-                    overflowY: "auto"
-                  }}>
-                    {activeSimCampaign.whatsapp_outbox_log[0]?.message || "Awaiting outbox logs..."}
-                  </pre>
+            {/* WhatsApp Header */}
+            <div style={{ background: "#202c33", padding: "10px 16px", display: "flex", alignItems: "center", gap: "10px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+              <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: "var(--primary-gradient)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "16px" }}>🤖</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: "13px", fontWeight: "bold", color: "#e9edef", margin: 0 }}>Synapse Approval Bot</div>
+                <div style={{ fontSize: "10px", color: "#8696a0", display: "flex", alignItems: "center", gap: "4px" }}>
+                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#00e676", display: "inline-block" }}></span>
+                  Online
                 </div>
-
-                <form onSubmit={handleSimulateWhatsAppReply} style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                  <label style={{ fontSize: "11px", color: "var(--text-dim)", fontWeight: 600 }}>INCOMING WHATSAPP REPLY CHAT</label>
-                  <div style={{ display: "flex", gap: "8px" }}>
-                    <input
-                      type="text"
-                      placeholder="e.g. Approve 3"
-                      value={simReply}
-                      onChange={(e) => setSimReply(e.target.value)}
-                      required
-                      style={{
-                        flex: 1,
-                        height: "38px",
-                        background: "rgba(255,255,255,0.03)",
-                        border: "1px solid rgba(255,255,255,0.06)",
-                        borderRadius: "8px",
-                        padding: "0 12px",
-                        color: "#fff",
-                        fontSize: "13px",
-                        outline: "none"
-                      }}
-                    />
-                    <button
-                      type="submit"
-                      disabled={simulating}
-                      style={{
-                        background: "#10b981",
-                        border: "none",
-                        borderRadius: "8px",
-                        color: "#fff",
-                        fontWeight: 600,
-                        fontSize: "12px",
-                        padding: "0 16px",
-                        cursor: "pointer"
-                      }}
-                    >
-                      {simulating ? "Sending..." : "Send Reply"}
-                    </button>
-                  </div>
-                </form>
               </div>
-            ) : (
-              <span style={{ fontSize: "12px", color: "var(--text-dim)", padding: "10px 0", textAlign: "center" }}>
-                No active pending campaign to simulate. Write a base campaign content above!
-              </span>
-            )}
+            </div>
+
+            {/* WhatsApp Chat Body */}
+            <div style={{
+              flex: 1,
+              background: "#0b141a",
+              backgroundImage: "radial-gradient(rgba(10, 20, 30, 0.8) 20%, transparent 20%)",
+              backgroundSize: "16px 16px",
+              padding: "16px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px",
+              overflowY: "auto"
+            }}>
+              <div style={{ alignSelf: "center", background: "#182229", color: "#8696a0", fontSize: "9px", padding: "4px 8px", borderRadius: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                Today
+              </div>
+
+              {activeSimCampaign ? (
+                <>
+                  {/* WhatsApp Sent Approval Message */}
+                  <div style={{
+                    alignSelf: "flex-start",
+                    background: "#202c33",
+                    color: "#e9edef",
+                    borderRadius: "0px 10px 10px 10px",
+                    padding: "10px 12px",
+                    maxWidth: "85%",
+                    fontSize: "12px",
+                    lineHeight: "1.45",
+                    boxShadow: "0 1px 2px rgba(0,0,0,0.15)",
+                    position: "relative"
+                  }}>
+                    <pre style={{
+                      margin: 0,
+                      fontFamily: "inherit",
+                      whiteSpace: "pre-wrap",
+                      color: "#e9edef"
+                    }}>
+                      {activeSimCampaign.whatsapp_outbox_log[0]?.message || "System error sending notification."}
+                    </pre>
+                    <span style={{ fontSize: "8px", color: "#8696a0", float: "right", marginTop: "4px" }}>
+                      {activeSimCampaign.created_at ? new Date(activeSimCampaign.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
+                    </span>
+                  </div>
+
+                  {/* Confirmation Message if Published */}
+                  {activeSimCampaign.status === "published" && (
+                    <div style={{
+                      alignSelf: "flex-start",
+                      background: "#202c33",
+                      color: "#e9edef",
+                      borderRadius: "0px 10px 10px 10px",
+                      padding: "10px 12px",
+                      maxWidth: "85%",
+                      fontSize: "12px",
+                      lineHeight: "1.45",
+                      boxShadow: "0 1px 2px rgba(0,0,0,0.15)"
+                    }}>
+                      <pre style={{ margin: 0, fontFamily: "inherit", whiteSpace: "pre-wrap", color: "#e9edef" }}>
+                        {activeSimCampaign.whatsapp_outbox_log[1]?.message || "✅ Selected post idea approved and published!"}
+                      </pre>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={{ alignSelf: "center", color: "#667781", fontSize: "11px", marginTop: "40px" }}>
+                  Awaiting campaign initiation to launch chat logs.
+                </div>
+              )}
+            </div>
+
+            {/* WhatsApp Text Input Footer */}
+            <form onSubmit={handleSimulateWhatsAppReply} style={{ background: "#202c33", padding: "10px", display: "flex", gap: "8px", alignItems: "center" }}>
+              <input
+                type="text"
+                disabled={!activeSimCampaign || activeSimCampaign.status !== "pending"}
+                placeholder={activeSimCampaign && activeSimCampaign.status === "pending" ? "Type 'Approve <number>' to verify..." : "WhatsApp chat locked"}
+                value={simReply}
+                onChange={(e) => setSimReply(e.target.value)}
+                style={{
+                  flex: 1,
+                  height: "38px",
+                  background: "#2a3942",
+                  border: "none",
+                  borderRadius: "20px",
+                  padding: "0 16px",
+                  color: "#e9edef",
+                  fontSize: "13px",
+                  outline: "none"
+                }}
+              />
+              <button
+                type="submit"
+                disabled={simulating || !activeSimCampaign || activeSimCampaign.status !== "pending"}
+                style={{
+                  width: "38px",
+                  height: "38px",
+                  background: "#00a884",
+                  borderRadius: "50%",
+                  border: "none",
+                  color: "#fff",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
+                  opacity: (!activeSimCampaign || activeSimCampaign.status !== "pending") ? 0.5 : 1
+                }}
+              >
+                ➔
+              </button>
+            </form>
           </div>
 
         </div>
 
-        {/* Right Side: Active Campaigns & Visualizer Mockups */}
+        {/* Right column: Active Campaigns Feed */}
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
           
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h3 style={{ margin: 0, color: "#fff", fontSize: "16px", fontWeight: 700 }}>Active Campaigns</h3>
-            <button onClick={loadCampaigns} style={{ background: "none", border: "none", color: "var(--primary)", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>
-              🔄 Refresh List
-            </button>
-          </div>
+          <h3 style={{ margin: "0 0 4px 0", color: "#fff", fontSize: "17px", fontWeight: 700 }}>Campaign Pipeline</h3>
 
           {loading ? (
-            <div style={{ textAlign: "center", padding: "40px", color: "var(--text-dim)" }}>
+            <div style={{ textAlign: "center", padding: "60px", color: "var(--text-dim)" }}>
               Fetching campaigns feed...
             </div>
           ) : campaigns.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "40px", color: "var(--text-dim)", background: "rgba(255,255,255,0.01)", borderRadius: "16px", border: "1px dashed rgba(255,255,255,0.06)" }}>
-              No social campaigns generated yet. Use the sidebar to launch one!
+            <div style={{ textAlign: "center", padding: "60px", color: "var(--text-dim)", background: "rgba(255,255,255,0.01)", borderRadius: "20px", border: "1px dashed rgba(255,255,255,0.06)" }}>
+              No social campaigns generated yet.
             </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
               {campaigns.map((camp) => {
                 const isPending = camp.status === "pending";
                 const activePlatform = previewPlatform[camp.id] || "facebook";
                 
                 return (
-                  <div key={camp.id} className="glass-card" style={{ padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+                  <div key={camp.id} className="glass-card" style={{ padding: "24px", border: "1px solid rgba(255,255,255,0.06)", boxShadow: "0 10px 40px rgba(0,0,0,0.25)", display: "flex", flexDirection: "column", gap: "20px" }}>
                     
                     {/* Header */}
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
                       <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <span style={{ fontSize: "14px", fontWeight: 700, color: "#fff" }}>ID: {camp.id}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <span style={{ fontSize: "14px", fontWeight: 800, color: "#fff", letterSpacing: "0.5px" }}>ID: {camp.id.toUpperCase()}</span>
                           <span style={{
                             fontSize: "10px",
-                            padding: "3px 8px",
-                            borderRadius: "12px",
-                            fontWeight: 600,
-                            background: isPending ? "rgba(245, 158, 11, 0.15)" : "rgba(16, 185, 129, 0.15)",
-                            color: isPending ? "#f59e0b" : "#10b981"
+                            padding: "4px 10px",
+                            borderRadius: "20px",
+                            fontWeight: 700,
+                            letterSpacing: "0.5px",
+                            textTransform: "uppercase",
+                            background: isPending ? "rgba(245, 158, 11, 0.12)" : "rgba(16, 185, 129, 0.12)",
+                            color: isPending ? "#fbbf24" : "#34d399",
+                            border: isPending ? "1px solid rgba(245, 158, 11, 0.2)" : "1px solid rgba(16, 185, 129, 0.2)"
                           }}>
-                            {isPending ? "⏳ Pending Approval" : "🚀 Published"}
+                            {isPending ? "⏳ Pending Approval" : "✅ Published"}
                           </span>
                         </div>
-                        <div style={{ fontSize: "11px", color: "var(--text-dim)", marginTop: "4px" }}>
-                          Created: {new Date(camp.created_at).toLocaleString()} | Target: {camp.whatsapp_number}
+                        <div style={{ fontSize: "11px", color: "var(--text-dim)", marginTop: "6px" }}>
+                          Created: {new Date(camp.created_at).toLocaleString()} | Mobile Admin: {camp.whatsapp_number}
                         </div>
                       </div>
 
                       {/* Mockup Preview Platform Selector */}
-                      <div style={{ display: "flex", background: "rgba(255,255,255,0.03)", borderRadius: "8px", padding: "3px", border: "1px solid rgba(255,255,255,0.05)" }}>
+                      <div style={{ display: "flex", background: "rgba(0,0,0,0.2)", borderRadius: "10px", padding: "4px", border: "1px solid rgba(255,255,255,0.04)" }}>
                         <button
                           onClick={() => togglePreviewPlatform(camp.id, "facebook")}
                           style={{
-                            background: activePlatform === "facebook" ? "rgba(129, 140, 248, 0.2)" : "none",
-                            border: "none",
-                            borderRadius: "6px",
-                            color: activePlatform === "facebook" ? "#818cf8" : "var(--text-muted)",
-                            fontSize: "10px",
-                            fontWeight: 600,
-                            padding: "4px 8px",
-                            cursor: "pointer"
+                            background: activePlatform === "facebook" ? "rgba(129, 140, 248, 0.15)" : "none",
+                            border: activePlatform === "facebook" ? "1px solid rgba(129,140,248,0.2)" : "1px solid transparent",
+                            borderRadius: "8px",
+                            color: activePlatform === "facebook" ? "#a5b4fc" : "var(--text-muted)",
+                            fontSize: "11px",
+                            fontWeight: 700,
+                            padding: "6px 12px",
+                            cursor: "pointer",
+                            transition: "all 0.2s"
                           }}
                         >
                           🌐 Facebook
@@ -1516,14 +1603,15 @@ const SocialHub = ({ serverUrl }: { serverUrl: string }) => {
                         <button
                           onClick={() => togglePreviewPlatform(camp.id, "instagram")}
                           style={{
-                            background: activePlatform === "instagram" ? "rgba(129, 140, 248, 0.2)" : "none",
-                            border: "none",
-                            borderRadius: "6px",
-                            color: activePlatform === "instagram" ? "#818cf8" : "var(--text-muted)",
-                            fontSize: "10px",
-                            fontWeight: 600,
-                            padding: "4px 8px",
-                            cursor: "pointer"
+                            background: activePlatform === "instagram" ? "rgba(129, 140, 248, 0.15)" : "none",
+                            border: activePlatform === "instagram" ? "1px solid rgba(129,140,248,0.2)" : "1px solid transparent",
+                            borderRadius: "8px",
+                            color: activePlatform === "instagram" ? "#a5b4fc" : "var(--text-muted)",
+                            fontSize: "11px",
+                            fontWeight: 700,
+                            padding: "6px 12px",
+                            cursor: "pointer",
+                            transition: "all 0.2s"
                           }}
                         >
                           📸 Instagram
@@ -1532,24 +1620,24 @@ const SocialHub = ({ serverUrl }: { serverUrl: string }) => {
                     </div>
 
                     {/* Original Base Content Box */}
-                    <div style={{ background: "rgba(255,255,255,0.01)", borderRadius: "8px", padding: "10px", border: "1px solid rgba(255,255,255,0.03)", fontSize: "12px", color: "var(--text-muted)" }}>
-                      <strong>Base Content:</strong> "{camp.content}"
+                    <div style={{ background: "rgba(255,255,255,0.01)", borderRadius: "10px", padding: "12px 16px", border: "1px solid rgba(255,255,255,0.03)", fontSize: "12px", color: "var(--text-muted)", lineHeight: "1.4" }}>
+                      <strong style={{ color: "var(--text-main)" }}>Campaign Source Prompt:</strong> "{camp.content}"
                     </div>
 
                     {/* Candidate Posts List / Selected Post Preview */}
-                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                      <label style={{ fontSize: "11px", color: "var(--text-dim)", fontWeight: 600 }}>AI SOCIAL MEDIA POST CANDIDATES</label>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                      <label style={{ fontSize: "11px", color: "var(--text-dim)", fontWeight: 800, letterSpacing: "0.5px" }}>AI COPYWRITER OPTIONS</label>
                       
                       {camp.posts.map((post, idx) => {
                         const isChosen = camp.approved_post_index === idx;
                         const cardBg = isChosen 
-                          ? "rgba(16, 185, 129, 0.05)" 
+                          ? "rgba(16, 185, 129, 0.03)" 
                           : isPending 
-                            ? "rgba(255, 255, 255, 0.02)" 
-                            : "rgba(255,255,255,0.01)";
+                            ? "rgba(255, 255, 255, 0.01)" 
+                            : "rgba(255,255,255,0.005)";
                         const borderStyle = isChosen 
-                          ? "1px solid #10b981" 
-                          : "1px solid rgba(255,255,255,0.05)";
+                          ? "1px solid rgba(16, 185, 129, 0.4)" 
+                          : "1px solid rgba(255,255,255,0.04)";
                           
                         return (
                           <div
@@ -1557,35 +1645,34 @@ const SocialHub = ({ serverUrl }: { serverUrl: string }) => {
                             style={{
                               background: cardBg,
                               border: borderStyle,
-                              borderRadius: "12px",
-                              padding: "14px",
+                              borderRadius: "16px",
+                              padding: "18px",
                               display: "flex",
                               flexDirection: "column",
-                              gap: "10px",
-                              opacity: !isPending && !isChosen ? 0.45 : 1,
+                              gap: "12px",
+                              opacity: !isPending && !isChosen ? 0.35 : 1,
                               transition: "all 0.2s"
                             }}
                           >
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                              <span style={{ fontSize: "12px", fontWeight: 700, color: isChosen ? "#10b981" : "#fff" }}>
-                                {isChosen ? "🏆 Approved Post Idea" : `Option #${idx + 1}`}
+                              <span style={{ fontSize: "13px", fontWeight: 700, color: isChosen ? "#34d399" : "#a855f7" }}>
+                                {isChosen ? "❇️ SELECTED & PUBLISHED" : `Post Template #${idx + 1}`}
                               </span>
                               
                               {isPending && (
                                 <button
                                   onClick={() => handleApprovePost(camp.id, idx)}
+                                  className="back-to-chat-btn"
                                   style={{
-                                    background: "rgba(129, 140, 248, 0.15)",
+                                    background: "rgba(129, 140, 248, 0.1)",
                                     border: "1px solid var(--primary)",
+                                    boxShadow: "none",
                                     borderRadius: "8px",
-                                    color: "#818cf8",
                                     fontSize: "11px",
-                                    fontWeight: 600,
-                                    padding: "4px 10px",
-                                    cursor: "pointer"
+                                    padding: "6px 12px"
                                   }}
                                 >
-                                  Approve & Publish
+                                  Approve Option
                                 </button>
                               )}
                             </div>
@@ -1594,28 +1681,42 @@ const SocialHub = ({ serverUrl }: { serverUrl: string }) => {
                             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                               {activePlatform === "facebook" ? (
                                 /* FB Layout Mock */
-                                <div style={{ background: "#18191a", border: "1px solid #3e4042", borderRadius: "8px", padding: "12px" }}>
-                                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                                    <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "var(--primary-gradient)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: "bold" }}>S</div>
+                                <div style={{ background: "#18191a", border: "1px solid #3e4042", borderRadius: "12px", padding: "16px", fontFamily: "sans-serif" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
+                                    <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "var(--primary-gradient)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: "bold", color: "#fff" }}>S</div>
                                     <div>
-                                      <div style={{ fontSize: "11px", fontWeight: "bold", color: "#e4e6eb" }}>Synapse Page</div>
-                                      <div style={{ fontSize: "9px", color: "#b0b3b8" }}>Sponsored • Public</div>
+                                      <div style={{ fontSize: "13px", fontWeight: "bold", color: "#e4e6eb" }}>Synapse Global</div>
+                                      <div style={{ fontSize: "10px", color: "#b0b3b8" }}>Just now • 🌐</div>
                                     </div>
                                   </div>
-                                  <p style={{ margin: 0, fontSize: "12px", color: "#e4e6eb", whiteSpace: "pre-wrap", lineHeight: "1.5" }}>{post}</p>
+                                  <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "#e4e6eb", whiteSpace: "pre-wrap", lineHeight: "1.5" }}>{post}</p>
+                                  
+                                  {/* FB Engagement bar */}
+                                  <div style={{ display: "flex", justifyContent: "space-between", borderTop: "1px solid #3e4042", paddingTop: "8px", fontSize: "12px", color: "#b0b3b8", fontWeight: 600 }}>
+                                    <span>👍 Like</span>
+                                    <span>💬 Comment</span>
+                                    <span>📤 Share</span>
+                                  </div>
                                 </div>
                               ) : (
                                 /* IG Layout Mock */
-                                <div style={{ background: "#000", border: "1px solid #262626", borderRadius: "8px", padding: "12px" }}>
-                                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                                    <div style={{ width: "24px", height: "24px", borderRadius: "50%", background: "linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "1px" }}>
-                                      <div style={{ width: "100%", height: "100%", borderRadius: "50%", background: "#000", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "8px", fontWeight: "bold" }}>S</div>
+                                <div style={{ background: "#000", border: "1px solid #262626", borderRadius: "12px", padding: "16px", fontFamily: "sans-serif" }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "12px" }}>
+                                    <div style={{ width: "30px", height: "30px", borderRadius: "50%", background: "linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)", display: "flex", alignItems: "center", justifyContent: "center", padding: "1.5px" }}>
+                                      <div style={{ width: "100%", height: "100%", borderRadius: "50%", background: "#000", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", fontWeight: "bold", color: "#fff" }}>S</div>
                                     </div>
-                                    <span style={{ fontSize: "11px", fontWeight: "bold", color: "#fff" }}>synapse_brand</span>
+                                    <span style={{ fontSize: "12px", fontWeight: "bold", color: "#fff" }}>synapse_platform</span>
                                   </div>
-                                  <p style={{ margin: 0, fontSize: "12px", color: "#fff", whiteSpace: "pre-wrap", lineHeight: "1.5" }}>
-                                    <strong>synapse_brand</strong> {post}
+                                  <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "#fff", whiteSpace: "pre-wrap", lineHeight: "1.5" }}>
+                                    <strong style={{ marginRight: "6px" }}>synapse_platform</strong>{post}
                                   </p>
+                                  
+                                  {/* IG Engagement bar */}
+                                  <div style={{ display: "flex", gap: "14px", borderTop: "1px solid #262626", paddingTop: "10px", fontSize: "14px" }}>
+                                    <span>❤️</span>
+                                    <span>💬</span>
+                                    <span>📤</span>
+                                  </div>
                                 </div>
                               )}
                             </div>
@@ -1626,17 +1727,19 @@ const SocialHub = ({ serverUrl }: { serverUrl: string }) => {
 
                     {/* Published Details receipt */}
                     {!isPending && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: "8px", background: "rgba(16, 185, 129, 0.04)", border: "1px solid rgba(16, 185, 129, 0.15)", borderRadius: "12px", padding: "14px" }}>
-                        <div style={{ fontSize: "12px", fontWeight: 700, color: "#10b981" }}>🚀 LIVE METRICS & PUBLISHING STATUS</div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", fontSize: "11px", color: "var(--text-muted)" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "10px", background: "rgba(16, 185, 129, 0.02)", border: "1px solid rgba(16, 185, 129, 0.2)", borderRadius: "16px", padding: "18px" }}>
+                        <div style={{ fontSize: "12px", fontWeight: 800, color: "#34d399", display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span>🏆</span> META GRAPH PUBLISHING RECEIPT
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px", fontSize: "12px", color: "var(--text-muted)" }}>
                           <div>
-                            <strong>Facebook Post ID:</strong> <span style={{ fontFamily: "monospace", color: "#fff" }}>{camp.fb_published_id}</span>
+                            <strong>Facebook API Post ID:</strong> <div style={{ fontFamily: "monospace", color: "#fff", background: "rgba(0,0,0,0.2)", padding: "4px 8px", borderRadius: "6px", display: "inline-block", marginTop: "4px" }}>{camp.fb_published_id}</div>
                           </div>
                           <div>
-                            <strong>Instagram Post ID:</strong> <span style={{ fontFamily: "monospace", color: "#fff" }}>{camp.ig_published_id}</span>
+                            <strong>Instagram Node ID:</strong> <div style={{ fontFamily: "monospace", color: "#fff", background: "rgba(0,0,0,0.2)", padding: "4px 8px", borderRadius: "6px", display: "inline-block", marginTop: "4px" }}>{camp.ig_published_id}</div>
                           </div>
                           <div>
-                            <strong>Approved at:</strong> <span style={{ color: "#fff" }}>{camp.approved_at ? new Date(camp.approved_at).toLocaleTimeString() : ""}</span>
+                            <strong>Approved At:</strong> <div style={{ color: "#fff", marginTop: "4px" }}>{camp.approved_at ? new Date(camp.approved_at).toLocaleString() : ""}</div>
                           </div>
                         </div>
                       </div>
@@ -1653,7 +1756,7 @@ const SocialHub = ({ serverUrl }: { serverUrl: string }) => {
       </div>
 
       {toast && (
-        <div className="toast-notification" style={{ background: "rgba(129,140,248,0.9)", border: "1px solid #818cf8" }}>
+        <div className="toast-notification" style={{ background: "linear-gradient(135deg, #a855f7 0%, #6366f1 100%)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: "12px", boxShadow: "0 10px 25px rgba(168, 85, 247, 0.3)" }}>
           <span>{toast}</span>
         </div>
       )}
