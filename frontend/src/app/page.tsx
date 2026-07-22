@@ -36,6 +36,11 @@ export default function FlexAIPortal() {
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
+  // WhatsApp States
+  const [whatsappNumber, setWhatsappNumber] = useState("");
+  const [callmebotKey, setCallmebotKey] = useState("");
+  const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
+
   // Navigation & UI States
   const [activeTab, setActiveTab] = useState<"dashboard" | "workout" | "live" | "nutrition">("dashboard");
   const [selectedTrainer, setSelectedTrainer] = useState<"Max" | "Serena" | "Leo">("Max");
@@ -165,6 +170,8 @@ export default function FlexAIPortal() {
         if (data.status === "success" && data.profile) {
           const prof = data.profile;
           setUsername(prof.username || "");
+          setWhatsappNumber(prof.whatsapp_number || "");
+          setCallmebotKey(prof.callmebot_key || "");
           setWorkoutParams({
             goal: prof.goal || "Build Muscle",
             level: prof.level || "Intermediate",
@@ -182,7 +189,7 @@ export default function FlexAIPortal() {
   const saveUserProfile = async (updatedParams: typeof workoutParams) => {
     if (!user) return;
     try {
-      await fetch(getApiUrl("/api/profile/update"), {
+      const res = await fetch(getApiUrl("/api/profile/update"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -192,10 +199,48 @@ export default function FlexAIPortal() {
           level: updatedParams.level,
           duration: updatedParams.duration,
           equipment: updatedParams.equipment,
+          whatsappNumber: whatsappNumber,
+          callmebotKey: callmebotKey
         }),
       });
+      if (res.ok) {
+        alert("Settings saved successfully!");
+      }
     } catch (e) {
       console.error("Error saving profile:", e);
+      alert("Failed to save settings.");
+    }
+  };
+
+  // Dispatch Daily Workout/Diet Summary to WhatsApp
+  const sendWhatsAppBrief = async () => {
+    if (!user) return;
+    if (!whatsappNumber || !callmebotKey) {
+      alert("Please configure your WhatsApp Phone Number and CallMeBot Key in the Profile settings card first!");
+      return;
+    }
+    setSendingWhatsApp(true);
+    try {
+      const res = await fetch(getApiUrl("/api/send-whatsapp-brief"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          workout: workoutPlan || undefined,
+          mealPlan: mealPlan || undefined
+        })
+      });
+      const data = await res.json();
+      if (data.status === "success") {
+        alert("📲 Daily Briefing sent to your WhatsApp successfully!");
+      } else {
+        alert(`❌ Failed to send brief: ${data.message}`);
+      }
+    } catch (err) {
+      console.error(err);
+      alert("❌ Error sending brief. Please verify your backend server.");
+    } finally {
+      setSendingWhatsApp(false);
     }
   };
 
@@ -912,11 +957,48 @@ export default function FlexAIPortal() {
                 </div>
               </div>
 
-              <div className="glass-panel" style={{ background: "rgba(0,0,0,0.15)", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-                <h3 style={{ fontSize: "1rem", marginBottom: "4px" }}>Coach Assigned: Coach {selectedTrainer}</h3>
-                <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", lineHeight: "1.4" }}>
-                  Welcome back, **{username || "Athlete"}**! Your profile variables are securely synced to the cloud database. Click **Workout Builder** to load your routine parameters.
-                </p>
+              <div className="glass-panel" style={{ background: "rgba(0,0,0,0.15)", display: "flex", flexDirection: "column", gap: "12px" }}>
+                <h3 style={{ fontSize: "1.1rem", marginBottom: "4px" }}>👤 Profile & WhatsApp Briefings</h3>
+                <div className="form-group" style={{ marginBottom: "0px" }}>
+                  <label className="form-label" style={{ fontSize: "0.7rem" }}>Athlete Nickname</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    style={{ padding: "8px 12px", fontSize: "0.8rem", width: "100%" }}
+                    placeholder="Athlete Name"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: "0px" }}>
+                  <label className="form-label" style={{ fontSize: "0.7rem" }}>WhatsApp Number</label>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    style={{ padding: "8px 12px", fontSize: "0.8rem", width: "100%" }}
+                    placeholder="e.g. +919876543210"
+                    value={whatsappNumber}
+                    onChange={(e) => setWhatsappNumber(e.target.value)}
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: "0px" }}>
+                  <label className="form-label" style={{ fontSize: "0.7rem" }}>CallMeBot API Key</label>
+                  <input 
+                    type="password" 
+                    className="form-input" 
+                    style={{ padding: "8px 12px", fontSize: "0.8rem", width: "100%" }}
+                    placeholder="Key"
+                    value={callmebotKey}
+                    onChange={(e) => setCallmebotKey(e.target.value)}
+                  />
+                </div>
+                <button 
+                  className="btn" 
+                  style={{ padding: "8px 14px", fontSize: "0.8rem", borderRadius: "10px", marginTop: "4px", width: "100%" }}
+                  onClick={() => saveUserProfile(workoutParams)}
+                >
+                  Save Profile Settings
+                </button>
               </div>
             </div>
           </div>
@@ -997,13 +1079,23 @@ export default function FlexAIPortal() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
                 <h2 style={{ fontSize: "1.4rem" }}>Your Exercises</h2>
                 {workoutPlan && (
-                  <button 
-                    className="btn" 
-                    style={{ background: "var(--primary)", color: "#000", padding: "8px 16px", fontSize: "0.8rem", borderRadius: "10px" }}
-                    onClick={startWorkoutSession}
-                  >
-                    ⚡ Start Session
-                  </button>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button 
+                      className="btn btn-secondary" 
+                      style={{ padding: "8px 16px", fontSize: "0.8rem", borderRadius: "10px" }}
+                      onClick={sendWhatsAppBrief}
+                      disabled={sendingWhatsApp}
+                    >
+                      {sendingWhatsApp ? "📲 Sending..." : "📲 Send to WhatsApp"}
+                    </button>
+                    <button 
+                      className="btn" 
+                      style={{ background: "var(--primary)", color: "#000", padding: "8px 16px", fontSize: "0.8rem", borderRadius: "10px" }}
+                      onClick={startWorkoutSession}
+                    >
+                      ⚡ Start Session
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -1300,7 +1392,19 @@ export default function FlexAIPortal() {
 
             {/* Display Outputs */}
             <div className="glass-panel" style={{ display: "flex", flexDirection: "column" }}>
-              <h2 style={{ fontSize: "1.4rem", marginBottom: "16px" }}>Your Diet Profile</h2>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
+                <h2 style={{ fontSize: "1.4rem" }}>Your Diet Profile</h2>
+                {mealPlan && (
+                  <button 
+                    className="btn btn-secondary" 
+                    style={{ padding: "8px 16px", fontSize: "0.8rem", borderRadius: "10px" }}
+                    onClick={sendWhatsAppBrief}
+                    disabled={sendingWhatsApp}
+                  >
+                    {sendingWhatsApp ? "📲 Sending..." : "📲 Send to WhatsApp"}
+                  </button>
+                )}
+              </div>
 
               {!mealPlan ? (
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--text-dim)", minHeight: "280px" }}>

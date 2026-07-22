@@ -61,6 +61,13 @@ class ProfileUpdateRequest(BaseModel):
     level: str
     duration: int
     equipment: str
+    whatsappNumber: Optional[str] = None
+    callmebotKey: Optional[str] = None
+
+class WhatsAppBriefRequest(BaseModel):
+    userId: str
+    workout: Optional[List[dict]] = None
+    mealPlan: Optional[dict] = None
 
 # Trainer Persona Prompts & Details
 TRAINER_PERSONAS = {
@@ -385,12 +392,99 @@ async def update_profile(req: ProfileUpdateRequest):
             "goal": req.goal,
             "level": req.level,
             "duration": req.duration,
-            "equipment": req.equipment
+            "equipment": req.equipment,
+            "whatsapp_number": req.whatsappNumber,
+            "callmebot_key": req.callmebotKey
         }
         supabase.table("profiles").upsert(profile_data).execute()
         return {"status": "success"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+# HTTP POST Endpoint: Send WhatsApp Brief
+@app.post("/api/send-whatsapp-brief")
+async def send_whatsapp_brief(req: WhatsAppBriefRequest):
+    if not supabase:
+        return {"status": "error", "message": "Supabase client not initialized"}
+    try:
+        res = supabase.table("profiles").select("whatsapp_number", "callmebot_key", "username").eq("id", req.userId).execute()
+        if not res.data or len(res.data) == 0:
+            return {"status": "error", "message": "User profile not found"}
+            
+        prof = res.data[0]
+        phone = prof.get("whatsapp_number")
+        key = prof.get("callmebot_key")
+        uname = prof.get("username", "Athlete")
+        
+        if not phone or not key:
+            return {"status": "error", "message": "WhatsApp number or CallMeBot API key is not configured"}
+            
+        msg = f"⚡ *FlexAI Daily Athlete Briefing* ⚡\n\nHello {uname}!\nHere is your plan for today:\n\n"
+        
+        if req.workout:
+            msg += "*🏋️ WORKOUT ROUTINE:*\n"
+            for idx, ex in enumerate(req.workout):
+                msg += f"{idx+1}. {ex.get('name')} ({ex.get('duration')}s active) - _Tip: {ex.get('tip')}_\n"
+            msg += "\n"
+            
+        if req.mealPlan:
+            msg += "*🥗 DIET PLAN:*\n"
+            msg += f"🍳 Breakfast: {req.mealPlan.get('Breakfast', 'N/A')}\n"
+            msg += f"🥗 Lunch: {req.mealPlan.get('Lunch', 'N/A')}\n"
+            msg += f"🍎 Snack: {req.mealPlan.get('Snack', 'N/A')}\n"
+            msg += f"🥩 Dinner: {req.mealPlan.get('Dinner', 'N/A')}\n"
+            if req.mealPlan.get('Macros'):
+                mac = req.mealPlan.get('Macros')
+                msg += f"_Macros: Carbs: {mac.get('Carbs')}, Protein: {mac.get('Protein')}, Fat: {mac.get('Fat')}_\n"
+                
+        msg += "\nStay dedicated! 💪🔥"
+        
+        encoded_msg = urllib.parse.quote_plus(msg)
+        url = f"https://api.callmebot.com/whatsapp.php?phone={phone}&text={encoded_msg}&apikey={key}"
+        
+        req_bot = urllib.request.Request(
+            url, 
+            headers={"User-Agent": "Mozilla/5.0"}
+        )
+        with urllib.request.urlopen(req_bot, timeout=10) as response:
+            resp_data = response.read().decode('utf-8')
+            
+        return {"status": "success", "response": resp_data}
+    except Exception as e:
+        print(f"Error dispatching WhatsApp brief: {e}")
+        return {"status": "error", "message": str(e)}
+
+# Background Automated WhatsApp Daily Scheduler
+import asyncio
+
+async def daily_whatsapp_scheduler():
+    await asyncio.sleep(10) # Initial startup delay
+    while True:
+        print("[Scheduler] Running automated daily WhatsApp briefings...")
+        if supabase:
+            try:
+                res = supabase.table("profiles").select("*").execute()
+                if res.data:
+                    for prof in res.data:
+                        phone = prof.get("whatsapp_number")
+                        key = prof.get("callmebot_key")
+                        if phone and key:
+                            msg = f"⚡ *FlexAI Daily Morning Reminder* ⚡\n\nRise and shine, {prof.get('username', 'Athlete')}!\nTime to smash your daily workout today.\nOpen the FlexAI app to launch your coaching player: https://frontend-three-pied-13.vercel.app 🏃🔥"
+                            encoded_msg = urllib.parse.quote_plus(msg)
+                            url = f"https://api.callmebot.com/whatsapp.php?phone={phone}&text={encoded_msg}&apikey={key}"
+                            req_bot = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                            try:
+                                with urllib.request.urlopen(req_bot, timeout=10) as r:
+                                    r.read()
+                            except Exception as inner:
+                                print(f"Failed to send scheduler alert to {phone}: {inner}")
+            except Exception as e:
+                print(f"Scheduler exception: {e}")
+        await asyncio.sleep(86400) # Run once every 24 hours
+
+@app.on_event("startup")
+async def start_scheduler():
+    asyncio.create_task(daily_whatsapp_scheduler())
 
 # WebSocket Connection Manager for live interactive coaching
 class ConnectionManager:
