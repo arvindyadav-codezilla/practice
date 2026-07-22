@@ -1,6 +1,14 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+// Initialize Supabase Client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const supabase = supabaseUrl && supabaseAnonKey && !supabaseUrl.includes("your_supabase")
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null;
 
 // Types
 interface Exercise {
@@ -19,11 +27,25 @@ interface ChatMessage {
 }
 
 export default function FlexAIPortal() {
+  // Authentication States
+  const [user, setUser] = useState<any>(null);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [username, setUsername] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
   // Navigation & UI States
   const [activeTab, setActiveTab] = useState<"dashboard" | "workout" | "live" | "nutrition">("dashboard");
   const [selectedTrainer, setSelectedTrainer] = useState<"Max" | "Serena" | "Leo">("Max");
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // User Stats (Loaded from DB or Mocked)
+  const [totalWorkouts, setTotalWorkouts] = useState(0);
+  const [caloriesBurned, setCaloriesBurned] = useState(0);
+  const [streakCount, setStreakCount] = useState(5);
 
   // Workout Builder States
   const [workoutParams, setWorkoutParams] = useState({
@@ -81,6 +103,171 @@ export default function FlexAIPortal() {
       return `${protocol}//${hostname}:8000${path}`;
     }
     return `wss://practice-ihvr.onrender.com${path}`;
+  };
+
+  // Listen to Auth State Changes
+  useEffect(() => {
+    if (!supabase) return;
+
+    // Get current session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser(session.user);
+        fetchUserProfile(session.user.id);
+        fetchUserStats(session.user.id);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setUser(session.user);
+        fetchUserProfile(session.user.id);
+        fetchUserStats(session.user.id);
+      } else {
+        setUser(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Fetch Stats from Backend (which pulls from Supabase)
+  const fetchUserStats = async (userId: string) => {
+    try {
+      const res = await fetch(getApiUrl(`/api/user-stats/${userId}`));
+      if (res.ok) {
+        const data = await res.json();
+        setTotalWorkouts(data.totalWorkouts || 0);
+        setCaloriesBurned(data.totalCalories || 0);
+        setStreakCount(data.streak || 0);
+      }
+    } catch (e) {
+      console.error("Error fetching stats:", e);
+    }
+  };
+
+  // Fetch User Profile Settings from Backend
+  const fetchUserProfile = async (userId: string) => {
+    try {
+      const res = await fetch(getApiUrl(`/api/profile/${userId}`));
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === "success" && data.profile) {
+          const prof = data.profile;
+          setUsername(prof.username || "");
+          setWorkoutParams({
+            goal: prof.goal || "Build Muscle",
+            level: prof.level || "Intermediate",
+            duration: prof.duration || 30,
+            equipment: prof.equipment || "Dumbbells",
+          });
+        }
+      }
+    } catch (e) {
+      console.error("Error fetching profile:", e);
+    }
+  };
+
+  // Update Profile Settings on Supabase
+  const saveUserProfile = async (updatedParams: typeof workoutParams) => {
+    if (!user) return;
+    try {
+      await fetch(getApiUrl("/api/profile/update"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          username: username || user.email?.split("@")[0] || "User",
+          goal: updatedParams.goal,
+          level: updatedParams.level,
+          duration: updatedParams.duration,
+          equipment: updatedParams.equipment,
+        }),
+      });
+    } catch (e) {
+      console.error("Error saving profile:", e);
+    }
+  };
+
+  // Login Handler
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supabase) {
+      alert("Supabase credentials not configured in env yet. Using offline mode.");
+      return;
+    }
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: authEmail,
+        password: authPassword,
+      });
+      if (error) throw error;
+      if (data.user) {
+        setUser(data.user);
+        fetchUserProfile(data.user.id);
+        fetchUserStats(data.user.id);
+      }
+    } catch (err: any) {
+      setAuthError(err.message || "Failed to sign in");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // Register Handler
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supabase) {
+      alert("Supabase credentials not configured. Using offline mode.");
+      return;
+    }
+    setAuthLoading(true);
+    setAuthError(null);
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: authEmail,
+        password: authPassword,
+        options: {
+          data: {
+            display_name: username || authEmail.split("@")[0],
+          }
+        }
+      });
+      if (error) throw error;
+      alert("Registration successful! Check your email for verification link.");
+      setAuthMode("signin");
+    } catch (err: any) {
+      setAuthError(err.message || "Failed to sign up");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // Offline Bypass
+  const handleSkipAuth = () => {
+    setUser({
+      id: "offline-user-uid-placeholder",
+      email: "offline-gymmer@flexai.io",
+      offline: true
+    });
+    setUsername("Guest Athlete");
+    setTotalWorkouts(3);
+    setCaloriesBurned(340);
+    setStreakCount(5);
+  };
+
+  // Logout Handler
+  const handleSignOut = async () => {
+    if (supabase && !user?.offline) {
+      await supabase.auth.signOut();
+    }
+    setUser(null);
+    setAuthEmail("");
+    setAuthPassword("");
+    setWorkoutPlan(null);
+    setWorkoutActive(false);
   };
 
   // Helper: Text-to-speech
@@ -194,7 +381,7 @@ export default function FlexAIPortal() {
     if (workoutActive && !workoutPaused) {
       interval = setInterval(() => {
         const base = timerMode === "exercise" ? 142 : 108;
-        const fluctuation = Math.floor(Math.random() * 12) - 6; // +/- 6
+        const fluctuation = Math.floor(Math.random() * 12) - 6; 
         setSimulatedHeartRate(base + fluctuation);
       }, 2000);
     } else {
@@ -242,6 +429,9 @@ export default function FlexAIPortal() {
       if (!response.ok) throw new Error("Server returned an error");
       const data = await response.json();
       setWorkoutPlan(data.workout);
+      
+      // Save profile variables to Database
+      saveUserProfile(workoutParams);
     } catch (err: any) {
       setErrorMsg("Failed to generate workout plan. Check backend server.");
       console.error(err);
@@ -330,7 +520,7 @@ export default function FlexAIPortal() {
     }
   };
 
-  const endWorkoutSuccess = () => {
+  const endWorkoutSuccess = async () => {
     setWorkoutActive(false);
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     
@@ -339,6 +529,31 @@ export default function FlexAIPortal() {
       ...prev,
       { sender: "system", text: "Workout completed!", timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
     ]);
+
+    // Save logs to Supabase DB via FastAPI
+    if (user) {
+      try {
+        const estCalories = workoutPlan ? workoutPlan.length * 75 : 300;
+        const totalSecs = workoutPlan ? workoutPlan.reduce((acc, curr) => acc + curr.duration + curr.rest, 0) : 1800;
+        
+        const res = await fetch(getApiUrl("/api/save-workout-log"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user.id,
+            trainer: selectedTrainer,
+            duration: Math.ceil(totalSecs / 60),
+            caloriesBurned: estCalories,
+            workoutPlan: workoutPlan
+          })
+        });
+        if (res.ok) {
+          fetchUserStats(user.id);
+        }
+      } catch (e) {
+        console.error("Error saving log:", e);
+      }
+    }
     
     alert("Workout finished! Awesome job!");
   };
@@ -397,13 +612,112 @@ export default function FlexAIPortal() {
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = totalDuration > 0 ? circumference - (timeLeft / totalDuration) * circumference : 0;
 
+  // Render Login Card if User is not logged in
+  if (!user) {
+    return (
+      <div className="app-container" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: "16px" }}>
+        <div className="glass-panel" style={{ width: "100%", maxWidth: "440px" }}>
+          <div style={{ textAlign: "center", marginBottom: "24px" }}>
+            <span style={{ fontSize: "3rem" }}>⚡</span>
+            <h1 style={{ fontSize: "1.8rem", marginTop: "8px" }}>FLEXAI // AI PORTAL</h1>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "4px" }}>
+              Join to customize workouts and sync fitness metrics in real time.
+            </p>
+          </div>
+
+          {authError && (
+            <div style={{ background: "rgba(239, 68, 68, 0.1)", border: "1px solid var(--error)", color: "#ff8888", padding: "10px 14px", borderRadius: "10px", fontSize: "0.8rem", marginBottom: "16px" }}>
+              ❌ {authError}
+            </div>
+          )}
+
+          {/* Form Auth Tabs */}
+          <div style={{ display: "flex", gap: "8px", background: "rgba(255,255,255,0.02)", padding: "4px", borderRadius: "10px", marginBottom: "20px", border: "1px solid var(--border-muted)" }}>
+            <button 
+              className="nav-tab-btn" 
+              style={{ flex: 1, padding: "6px", background: authMode === "signin" ? "var(--primary)" : "transparent", color: authMode === "signin" ? "#000" : "var(--text-muted)" }}
+              onClick={() => setAuthMode("signin")}
+            >
+              Sign In
+            </button>
+            <button 
+              className="nav-tab-btn" 
+              style={{ flex: 1, padding: "6px", background: authMode === "signup" ? "var(--primary)" : "transparent", color: authMode === "signup" ? "#000" : "var(--text-muted)" }}
+              onClick={() => setAuthMode("signup")}
+            >
+              Sign Up
+            </button>
+          </div>
+
+          <form onSubmit={authMode === "signin" ? handleSignIn : handleSignUp} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            {authMode === "signup" && (
+              <div className="form-group">
+                <label className="form-label">Athlete Nickname</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  placeholder="e.g. FitChamp"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required
+                />
+              </div>
+            )}
+
+            <div className="form-group">
+              <label className="form-label">Email Address</label>
+              <input 
+                type="email" 
+                className="form-input" 
+                placeholder="athlete@domain.com"
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Secure Password</label>
+              <input 
+                type="password" 
+                className="form-input" 
+                placeholder="••••••••"
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                required
+              />
+            </div>
+
+            <button className="btn" type="submit" style={{ width: "100%", marginTop: "6px" }} disabled={authLoading}>
+              {authLoading ? "Synchronizing..." : authMode === "signin" ? "Access Dashboard" : "Create Athlete Account"}
+            </button>
+          </form>
+
+          <div style={{ marginTop: "20px", display: "flex", flexDirection: "column", gap: "10px", alignItems: "center" }}>
+            <span style={{ fontSize: "0.75rem", color: "var(--text-dim)" }}>— OR —</span>
+            <button 
+              className="btn btn-secondary" 
+              style={{ width: "100%", borderRadius: "12px", fontSize: "0.85rem" }}
+              onClick={handleSkipAuth}
+            >
+              🏃 Skip (Use Offline Demo Mode)
+            </button>
+            <span style={{ fontSize: "0.7rem", color: "var(--text-dim)", textAlign: "center" }}>
+              {!supabase && "⚠️ Database not configured in local environment. Offline mode available."}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`app-container theme-${selectedTrainer}`}>
       {/* Desktop Header */}
       <header className="navbar">
-        <div className="brand">
+        <div className="brand" onClick={() => setActiveTab("dashboard")} style={{ cursor: "pointer" }}>
           <span className="brand-icon">⚡</span>
-          <span>FLEXAI // COCH</span>
+          <span>FLEXAI // {username || "ATHLETE"}</span>
         </div>
         
         <nav className="nav-tabs">
@@ -448,10 +762,13 @@ export default function FlexAIPortal() {
           >
             {voiceEnabled ? "🔊 Voice On" : "🔇 Muted"}
           </button>
-          <div className="stat-pill">
-            <span>Streak</span>
-            <span className="stat-val">🔥 5 Days</span>
-          </div>
+          <button 
+            className="btn btn-secondary"
+            style={{ padding: "6px 12px", fontSize: "0.75rem", borderRadius: "8px", border: "1px dashed var(--error)", color: "var(--error)" }}
+            onClick={handleSignOut}
+          >
+            Logout
+          </button>
         </div>
       </header>
 
@@ -473,11 +790,18 @@ export default function FlexAIPortal() {
         {/* Tab 1: Dashboard */}
         {activeTab === "dashboard" && (
           <div className="glass-panel glow-primary" style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-            <div style={{ borderBottom: "1px solid var(--border-muted)", paddingBottom: "12px" }}>
-              <h2 style={{ fontSize: "1.6rem" }}>Select Your AI Gym Coach</h2>
-              <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "4px" }}>
-                Select a trainer card below. The interface theme, fonts, prompts, and spoken speech synthesis change immediately.
-              </p>
+            <div style={{ borderBottom: "1px solid var(--border-muted)", paddingBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+              <div>
+                <h2 style={{ fontSize: "1.6rem" }}>Select Your AI Gym Coach</h2>
+                <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "4px" }}>
+                  Select a trainer card below. The interface theme, fonts, prompts, and spoken speech synthesis change immediately.
+                </p>
+              </div>
+              {user?.offline && (
+                <div style={{ background: "rgba(249, 115, 22, 0.1)", border: "1px solid var(--accent-orange)", padding: "4px 10px", borderRadius: "8px", fontSize: "0.75rem", color: "var(--accent-orange)", fontWeight: 700 }}>
+                  🚨 Running in Offline Demo Mode
+                </div>
+              )}
             </div>
 
             {/* Trainer Cards */}
@@ -561,15 +885,19 @@ export default function FlexAIPortal() {
             {/* Performance Stats Cards */}
             <div className="grid-2">
               <div className="glass-panel" style={{ background: "rgba(0,0,0,0.15)" }}>
-                <h3 style={{ fontSize: "1rem", marginBottom: "12px" }}>Daily Stats</h3>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-                  <div style={{ background: "rgba(255,255,255,0.02)", padding: "12px", borderRadius: "12px", border: "1px solid var(--border-muted)" }}>
-                    <div style={{ fontSize: "0.7rem", color: "var(--text-dim)" }}>HEART RATE</div>
-                    <div style={{ fontSize: "1.25rem", fontWeight: 800, color: "var(--secondary)", marginTop: "2px" }}>74 BPM</div>
+                <h3 style={{ fontSize: "1.5rem", marginBottom: "16px" }}>Persistent Metrics (Supabase DB)</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+                  <div style={{ background: "rgba(255,255,255,0.02)", padding: "10px", borderRadius: "12px", border: "1px solid var(--border-muted)", textAlign: "center" }}>
+                    <div style={{ fontSize: "0.65rem", color: "var(--text-dim)" }}>COMPLETED</div>
+                    <div style={{ fontSize: "1.2rem", fontWeight: 800, color: "var(--secondary)", marginTop: "2px" }}>{totalWorkouts} Sessions</div>
                   </div>
-                  <div style={{ background: "rgba(255,255,255,0.02)", padding: "12px", borderRadius: "12px", border: "1px solid var(--border-muted)" }}>
-                    <div style={{ fontSize: "0.7rem", color: "var(--text-dim)" }}>CALORIES</div>
-                    <div style={{ fontSize: "1.25rem", fontWeight: 800, color: "var(--primary)", marginTop: "2px" }}>320 KCAL</div>
+                  <div style={{ background: "rgba(255,255,255,0.02)", padding: "10px", borderRadius: "12px", border: "1px solid var(--border-muted)", textAlign: "center" }}>
+                    <div style={{ fontSize: "0.65rem", color: "var(--text-dim)" }}>BURNED</div>
+                    <div style={{ fontSize: "1.2rem", fontWeight: 800, color: "var(--primary)", marginTop: "2px" }}>{caloriesBurned} KCal</div>
+                  </div>
+                  <div style={{ background: "rgba(255,255,255,0.02)", padding: "10px", borderRadius: "12px", border: "1px solid var(--border-muted)", textAlign: "center" }}>
+                    <div style={{ fontSize: "0.65rem", color: "var(--text-dim)" }}>STREAK</div>
+                    <div style={{ fontSize: "1.2rem", fontWeight: 800, color: "var(--accent-orange)", marginTop: "2px" }}>🔥 {streakCount} Days</div>
                   </div>
                 </div>
               </div>
@@ -577,7 +905,7 @@ export default function FlexAIPortal() {
               <div className="glass-panel" style={{ background: "rgba(0,0,0,0.15)", display: "flex", flexDirection: "column", justifyContent: "center" }}>
                 <h3 style={{ fontSize: "1rem", marginBottom: "4px" }}>Coach Assigned: Coach {selectedTrainer}</h3>
                 <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", lineHeight: "1.4" }}>
-                  Your live workouts, voices, prompts, and corrections will be processed by Coach {selectedTrainer}. Click Workout Builder to start configuring.
+                  Welcome back, **{username || "Athlete"}**! Your profile variables are securely synced to the cloud database. Click **Workout Builder** to load your routine parameters.
                 </p>
               </div>
             </div>
@@ -1072,18 +1400,6 @@ export default function FlexAIPortal() {
           <span>Diet</span>
         </button>
       </nav>
-
-      {/* Desktop Footer only */}
-      <footer className="main-content" style={{
-        textAlign: "center",
-        padding: "16px",
-        fontSize: "0.75rem",
-        color: "var(--text-dim)",
-        borderTop: "1px solid var(--border-muted)",
-        marginTop: "auto"
-      }}>
-        FlexAI Portal • Real-time Coach Audio Engine
-      </footer>
     </div>
   );
 }

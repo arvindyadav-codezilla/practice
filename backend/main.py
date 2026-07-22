@@ -7,8 +7,21 @@ import urllib.request
 import urllib.parse
 from typing import Dict, List, Optional
 from dotenv import load_dotenv
+from supabase import create_client, Client
 
 load_dotenv()
+
+# Initialize Supabase client
+supabase_url = os.getenv("SUPABASE_URL")
+supabase_key = os.getenv("SUPABASE_ANON_KEY")
+supabase: Optional[Client] = None
+
+if supabase_url and supabase_key and "your_supabase" not in supabase_url:
+    try:
+        supabase = create_client(supabase_url, supabase_key)
+        print("Supabase client initialized successfully.")
+    except Exception as e:
+        print(f"Failed to initialize Supabase client: {e}")
 
 app = FastAPI(title="FlexAI Backend - AI Gym Trainer & Live Coach API")
 
@@ -33,6 +46,21 @@ class MealPlanRequest(BaseModel):
     goal: str         # e.g., "Lose Weight", "Build Muscle", "Maintain Fitness"
     dietType: str     # e.g., "Balanced", "High Protein", "Keto", "Vegan", "Vegetarian"
     calories: int     # e.g., 2000
+
+class SaveWorkoutLogRequest(BaseModel):
+    userId: str
+    trainer: str
+    duration: int
+    caloriesBurned: int
+    workoutPlan: Optional[List[dict]] = None
+
+class ProfileUpdateRequest(BaseModel):
+    userId: str
+    username: str
+    goal: str
+    level: str
+    duration: int
+    equipment: str
 
 # Trainer Persona Prompts & Details
 TRAINER_PERSONAS = {
@@ -267,6 +295,102 @@ async def generate_meal_plan(req: MealPlanRequest):
     # Fallback to local
     fallback_diet = req.dietType if req.dietType in OFFLINE_MEALS else "Balanced"
     return {"source": "Offline Database", "mealPlan": OFFLINE_MEALS[fallback_diet]}
+
+# HTTP POST Endpoint: Save Workout Log
+@app.post("/api/save-workout-log")
+async def save_workout_log(req: SaveWorkoutLogRequest):
+    if not supabase:
+        return {"status": "success", "message": "Supabase client not initialized (Offline mode)"}
+    try:
+        log_data = {
+            "user_id": req.userId,
+            "trainer": req.trainer,
+            "duration": req.duration,
+            "calories_burned": req.caloriesBurned,
+            "workout_plan": req.workoutPlan
+        }
+        supabase.table("workout_logs").insert(log_data).execute()
+        
+        # Update streak in profiles
+        profile_res = supabase.table("profiles").select("streak_count").eq("id", req.userId).execute()
+        if profile_res.data and len(profile_res.data) > 0:
+            current_streak = profile_res.data[0].get("streak_count", 0)
+            new_streak = current_streak + 1
+            supabase.table("profiles").update({"streak_count": new_streak}).eq("id", req.userId).execute()
+            return {"status": "success", "streak": new_streak}
+        else:
+            supabase.table("profiles").insert({"id": req.userId, "streak_count": 1}).execute()
+            return {"status": "success", "streak": 1}
+    except Exception as e:
+        print(f"Error saving workout log to Supabase: {e}")
+        return {"status": "error", "message": str(e)}
+
+# HTTP GET Endpoint: Get User Stats
+@app.get("/api/user-stats/{user_id}")
+async def get_user_stats(user_id: str):
+    if not supabase:
+        return {
+            "status": "success",
+            "totalWorkouts": 3,
+            "totalCalories": 320,
+            "streak": 5,
+            "message": "Offline Mode fallback"
+        }
+    try:
+        profile_res = supabase.table("profiles").select("streak_count").eq("id", user_id).execute()
+        streak = profile_res.data[0].get("streak_count", 0) if (profile_res.data and len(profile_res.data) > 0) else 0
+        
+        logs_res = supabase.table("workout_logs").select("duration", "calories_burned").eq("user_id", user_id).execute()
+        total_workouts = len(logs_res.data) if (logs_res.data and isinstance(logs_res.data, list)) else 0
+        total_calories = sum(log.get("calories_burned", 0) for log in logs_res.data) if logs_res.data else 0
+        
+        return {
+            "status": "success",
+            "totalWorkouts": total_workouts,
+            "totalCalories": total_calories,
+            "streak": streak
+        }
+    except Exception as e:
+        print(f"Error fetching user stats: {e}")
+        return {
+            "status": "error",
+            "totalWorkouts": 0,
+            "totalCalories": 0,
+            "streak": 0,
+            "message": str(e)
+        }
+
+# HTTP GET Endpoint: Get Profile
+@app.get("/api/profile/{user_id}")
+async def get_profile(user_id: str):
+    if not supabase:
+        return {"status": "error", "message": "Offline mode"}
+    try:
+        res = supabase.table("profiles").select("*").eq("id", user_id).execute()
+        if res.data and len(res.data) > 0:
+            return {"status": "success", "profile": res.data[0]}
+        return {"status": "not_found"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+# HTTP POST Endpoint: Update Profile
+@app.post("/api/profile/update")
+async def update_profile(req: ProfileUpdateRequest):
+    if not supabase:
+        return {"status": "error", "message": "Offline mode"}
+    try:
+        profile_data = {
+            "id": req.userId,
+            "username": req.username,
+            "goal": req.goal,
+            "level": req.level,
+            "duration": req.duration,
+            "equipment": req.equipment
+        }
+        supabase.table("profiles").upsert(profile_data).execute()
+        return {"status": "success"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 # WebSocket Connection Manager for live interactive coaching
 class ConnectionManager:
