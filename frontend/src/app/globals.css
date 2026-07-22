@@ -794,3 +794,57 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 0.8rem;
   color: var(--text-muted);
 }
+
+/* Responsive stats layout */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 8px;
+}
+@media (max-width: 580px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+
+/* Card-Specific Trainer Highlights */
+.trainer-card.card-Max:hover, .trainer-card.card-Max.selected {
+  border-color: var(--accent-orange) !important;
+  box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.5), 0 0 20px rgba(249, 115, 22, 0.35) !important;
+}
+.trainer-card.card-Serena:hover, .trainer-card.card-Serena.selected {
+  border-color: var(--accent-violet) !important;
+  box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.5), 0 0 20px rgba(167, 139, 250, 0.35) !important;
+}
+.trainer-card.card-Leo:hover, .trainer-card.card-Leo.selected {
+  border-color: var(--accent-pink) !important;
+  box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.5), 0 0 20px rgba(236, 72, 153, 0.35) !important;
+}
+
+/* Auth Cards UI Styles */
+.auth-card-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 16px;
+  background: radial-gradient(circle at 50% 30%, rgba(163, 230, 53, 0.04), transparent 50%), #09090b;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 440px;
+  border-color: var(--primary-glow);
+  box-shadow: 0 24px 60px -15px rgba(0, 0, 0, 0.8), 0 0 20px var(--primary-glow);
+  animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Background spots */
+.app-container {
+  background: radial-gradient(circle at 50% 0%, rgba(24, 24, 27, 0.8) 0%, #09090b 100%),
+              radial-gradient(circle at 0% 100%, rgba(14, 165, 233, 0.04) 0%, transparent 40%),
+              radial-gradient(circle at 100% 100%, rgba(163, 230, 53, 0.04) 0%, transparent 40%);
+}
+

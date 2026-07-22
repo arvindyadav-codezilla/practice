@@ -92,7 +92,12 @@ export default function FlexAIPortal() {
     if (hostname === "localhost" || hostname === "127.0.0.1") {
       return `http://${hostname}:8000${path}`;
     }
-    return `https://practice-ihvr.onrender.com${path}`;
+    const envUrl = process.env.NEXT_PUBLIC_WS_SERVER_URL;
+    if (envUrl) {
+      const httpUrl = envUrl.replace("wss://", "https://").replace("ws://", "http://").replace("/ws", "");
+      return `${httpUrl}${path}`;
+    }
+    return `https://synapse-chat-backend.onrender.com${path}`;
   };
 
   const getWsUrl = (path: string) => {
@@ -102,7 +107,12 @@ export default function FlexAIPortal() {
     if (hostname === "localhost" || hostname === "127.0.0.1") {
       return `${protocol}//${hostname}:8000${path}`;
     }
-    return `wss://practice-ihvr.onrender.com${path}`;
+    const envUrl = process.env.NEXT_PUBLIC_WS_SERVER_URL;
+    if (envUrl) {
+      const wsBase = envUrl.replace("/ws", "");
+      return `${wsBase}${path}`;
+    }
+    return `wss://synapse-chat-backend.onrender.com${path}`;
   };
 
   // Listen to Auth State Changes
@@ -615,8 +625,8 @@ export default function FlexAIPortal() {
   // Render Login Card if User is not logged in
   if (!user) {
     return (
-      <div className="app-container" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: "16px" }}>
-        <div className="glass-panel" style={{ width: "100%", maxWidth: "440px" }}>
+      <div className="auth-card-wrapper">
+        <div className="glass-panel auth-card">
           <div style={{ textAlign: "center", marginBottom: "24px" }}>
             <span style={{ fontSize: "3rem" }}>⚡</span>
             <h1 style={{ fontSize: "1.8rem", marginTop: "8px" }}>FLEXAI // AI PORTAL</h1>
@@ -808,7 +818,7 @@ export default function FlexAIPortal() {
             <div className="grid-3">
               {/* Max */}
               <div 
-                className={`trainer-card ${selectedTrainer === "Max" ? "selected" : ""}`}
+                className={`trainer-card card-Max ${selectedTrainer === "Max" ? "selected" : ""}`}
                 onClick={() => setSelectedTrainer("Max")}
               >
                 <div className="trainer-img-placeholder" style={{ color: "var(--accent-orange)" }}>
@@ -833,7 +843,7 @@ export default function FlexAIPortal() {
 
               {/* Serena */}
               <div 
-                className={`trainer-card ${selectedTrainer === "Serena" ? "selected" : ""}`}
+                className={`trainer-card card-Serena ${selectedTrainer === "Serena" ? "selected" : ""}`}
                 onClick={() => setSelectedTrainer("Serena")}
               >
                 <div className="trainer-img-placeholder" style={{ color: "var(--accent-violet)" }}>
@@ -858,7 +868,7 @@ export default function FlexAIPortal() {
 
               {/* Leo */}
               <div 
-                className={`trainer-card ${selectedTrainer === "Leo" ? "selected" : ""}`}
+                className={`trainer-card card-Leo ${selectedTrainer === "Leo" ? "selected" : ""}`}
                 onClick={() => setSelectedTrainer("Leo")}
               >
                 <div className="trainer-img-placeholder" style={{ color: "var(--accent-pink)" }}>
@@ -886,7 +896,7 @@ export default function FlexAIPortal() {
             <div className="grid-2">
               <div className="glass-panel" style={{ background: "rgba(0,0,0,0.15)" }}>
                 <h3 style={{ fontSize: "1.5rem", marginBottom: "16px" }}>Persistent Metrics (Supabase DB)</h3>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+                <div className="stats-grid">
                   <div style={{ background: "rgba(255,255,255,0.02)", padding: "10px", borderRadius: "12px", border: "1px solid var(--border-muted)", textAlign: "center" }}>
                     <div style={{ fontSize: "0.65rem", color: "var(--text-dim)" }}>COMPLETED</div>
                     <div style={{ fontSize: "1.2rem", fontWeight: 800, color: "var(--secondary)", marginTop: "2px" }}>{totalWorkouts} Sessions</div>
@@ -1067,7 +1077,7 @@ export default function FlexAIPortal() {
 
                   {/* Circular visual timer */}
                   <div className="timer-container">
-                    <svg className="timer-circle-svg">
+                    <svg className="timer-circle-svg" viewBox="0 0 200 200">
                       <circle 
                         className="timer-circle-bg" 
                         cx="100" 
