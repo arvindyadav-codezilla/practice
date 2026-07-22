@@ -131,7 +131,7 @@ async def fetch_gemini_api(prompt: str) -> Optional[str]:
     if not api_key:
         return None
         
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
     headers = {"Content-Type": "application/json"}
     data = {
         "contents": [{

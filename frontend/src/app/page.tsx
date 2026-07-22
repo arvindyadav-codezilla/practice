@@ -67,7 +67,7 @@ export default function FlexAIPortal() {
     if (typeof window === "undefined") return "";
     const hostname = window.location.hostname;
     if (hostname === "localhost" || hostname === "127.0.0.1") {
-      return `http://127.0.0.1:8000${path}`;
+      return `http://${hostname}:8000${path}`;
     }
     return `https://practice-ihvr.onrender.com${path}`;
   };
@@ -77,7 +77,7 @@ export default function FlexAIPortal() {
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const hostname = window.location.hostname;
     if (hostname === "localhost" || hostname === "127.0.0.1") {
-      return `ws://127.0.0.1:8000${path}`;
+      return `${protocol}//${hostname}:8000${path}`;
     }
     return `wss://practice-ihvr.onrender.com${path}`;
   };
