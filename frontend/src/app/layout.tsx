@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Synapse Chat | Premium Real-time Groups",
-  description: "A fast, beautifully crafted real-time group chat application powered by Next.js and Python WebSockets.",
+  title: "FlexAI | AI Agent Gym Trainer & Live Coach",
+  description: "Get custom workout routines, meal plans, and real-time audio coaching from expert AI trainers.",
 };
 
 export default function RootLayout({
