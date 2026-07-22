@@ -40,8 +40,9 @@ export default function FlexAIPortal() {
   const [workoutPaused, setWorkoutPaused] = useState(false);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
-  const [totalDuration, setTotalDuration] = useState(0); // For circle percentage
+  const [totalDuration, setTotalDuration] = useState(0); 
   const [timerMode, setTimerMode] = useState<"exercise" | "rest" | "cooldown">("exercise");
+  const [simulatedHeartRate, setSimulatedHeartRate] = useState(72);
 
   // Meal & Nutrition Planner States
   const [mealParams, setMealParams] = useState({
@@ -62,7 +63,7 @@ export default function FlexAIPortal() {
   // Timer Interval Reference
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Helper: Resolve dynamic URLs (works both locally and on Render/Vercel)
+  // Helper: Resolve URLs
   const getApiUrl = (path: string) => {
     if (typeof window === "undefined") return "";
     const hostname = window.location.hostname;
@@ -86,27 +87,24 @@ export default function FlexAIPortal() {
   const speak = (text: string) => {
     if (!voiceEnabled || typeof window === "undefined" || !window.speechSynthesis) return;
 
-    // Cancel any active speech first
     window.speechSynthesis.cancel();
-
     const utterance = new SpeechSynthesisUtterance(text);
     
-    // Customize speech properties based on trainer persona
     if (selectedTrainer === "Serena") {
-      utterance.pitch = 1.1;
-      utterance.rate = 0.85; // Calmer & slower
+      utterance.pitch = 1.15;
+      utterance.rate = 0.8; 
     } else if (selectedTrainer === "Leo") {
-      utterance.pitch = 1.0;
-      utterance.rate = 1.2;  // High speed HIIT style
+      utterance.pitch = 1.05;
+      utterance.rate = 1.25; 
     } else {
       utterance.pitch = 0.9;
-      utterance.rate = 1.0;  // Motivating strength coach
+      utterance.rate = 1.0; 
     }
 
     window.speechSynthesis.speak(utterance);
   };
 
-  // Connect to WebSocket Live Coach
+  // Connect WebSocket
   const connectWebSocket = () => {
     if (socketRef.current) {
       socketRef.current.close();
@@ -120,7 +118,6 @@ export default function FlexAIPortal() {
       ws.onopen = () => {
         setWsConnected(true);
         setErrorMsg(null);
-        // Start session on backend
         ws.send(JSON.stringify({
           type: "start",
           trainer: selectedTrainer
@@ -131,19 +128,13 @@ export default function FlexAIPortal() {
         const data = JSON.parse(event.data);
         
         if (data.type === "trainer_cue") {
-          // Play the voice cue
-          if (data.audioText) {
-            speak(data.audioText);
-          }
+          if (data.audioText) speak(data.audioText);
           setChatMessages((prev) => [
             ...prev,
             { sender: "trainer", text: data.cue, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
           ]);
         } else if (data.type === "message") {
-          // Regular text message response from trainer
-          if (data.audioText) {
-            speak(data.audioText);
-          }
+          if (data.audioText) speak(data.audioText);
           setChatMessages((prev) => [
             ...prev,
             { sender: "trainer", text: data.message, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
@@ -156,30 +147,22 @@ export default function FlexAIPortal() {
         }
       };
 
-      ws.onclose = () => {
-        setWsConnected(false);
-      };
-
-      ws.onerror = () => {
-        setWsConnected(false);
-      };
+      ws.onclose = () => setWsConnected(false);
+      ws.onerror = () => setWsConnected(false);
     } catch (e) {
-      console.error("WS connect error:", e);
+      console.error(e);
     }
   };
 
-  // Send message over WebSocket
+  // Send message
   const sendChatMessage = (messageText: string) => {
     const text = messageText || inputText;
     if (!text.trim()) return;
 
-    // Add to local chat logs immediately
-    const userMsg: ChatMessage = {
-      sender: "user",
-      text: text,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    setChatMessages((prev) => [...prev, userMsg]);
+    setChatMessages((prev) => [
+      ...prev,
+      { sender: "user", text: text, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+    ]);
     setInputText("");
 
     if (socketRef.current && wsConnected) {
@@ -189,41 +172,51 @@ export default function FlexAIPortal() {
         message: text
       }));
     } else {
-      // Offline fallback simulation
       setTimeout(() => {
-        let reply = "I'm offline, but I still believe in you! Keep pushing and make every single rep count!";
+        let reply = "Keep pushing! Make every rep count.";
         if (selectedTrainer === "Serena") {
-          reply = "Even in silence, keep checking in with your breath. Find your center.";
+          reply = "Inhale peace, exhale tension. Let your alignment guide you.";
         } else if (selectedTrainer === "Leo") {
-          reply = "Come on! No excuses! Keep moving, keep sweating!";
+          reply = "Speed it up! Sweat is just fat crying! Let's go!";
         }
         setChatMessages((prev) => [
           ...prev,
           { sender: "trainer", text: reply, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
         ]);
         speak(reply);
-      }, 800);
+      }, 700);
     }
   };
 
-  // Scroll chat to bottom
+  // Simulated Heart Rate Tracker
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    if (workoutActive && !workoutPaused) {
+      interval = setInterval(() => {
+        const base = timerMode === "exercise" ? 142 : 108;
+        const fluctuation = Math.floor(Math.random() * 12) - 6; // +/- 6
+        setSimulatedHeartRate(base + fluctuation);
+      }, 2000);
+    } else {
+      setSimulatedHeartRate(74);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [workoutActive, workoutPaused, timerMode]);
+
+  // Scroll chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
-  // Clean up WebSocket on unmount
   useEffect(() => {
     return () => {
-      if (socketRef.current) {
-        socketRef.current.close();
-      }
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-      }
+      if (socketRef.current) socketRef.current.close();
+      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     };
   }, []);
 
-  // Trainer Intro Voice play
   const playTrainerIntro = (trainer: "Max" | "Serena" | "Leo") => {
     let introText = "";
     if (trainer === "Max") {
@@ -250,7 +243,7 @@ export default function FlexAIPortal() {
       const data = await response.json();
       setWorkoutPlan(data.workout);
     } catch (err: any) {
-      setErrorMsg("Failed to generate workout plan. Please verify backend connection.");
+      setErrorMsg("Failed to generate workout plan. Check backend server.");
       console.error(err);
     } finally {
       setWorkoutGenerating(false);
@@ -271,20 +264,17 @@ export default function FlexAIPortal() {
       const data = await response.json();
       setMealPlan(data.mealPlan);
     } catch (err) {
-      setErrorMsg("Failed to generate meal plan. Using local templates.");
+      setErrorMsg("Failed to generate meal plan. Using local presets.");
     } finally {
       setMealGenerating(false);
     }
   };
 
-  // Live Workout Player Logic
+  // Live Workout Player control
   const startWorkoutSession = () => {
     if (!workoutPlan || workoutPlan.length === 0) return;
     
-    // Setup WS connection
     connectWebSocket();
-    
-    // Setup initial exercise parameters
     setWorkoutActive(true);
     setWorkoutPaused(false);
     setCurrentExerciseIndex(0);
@@ -295,16 +285,13 @@ export default function FlexAIPortal() {
     setTotalDuration(firstEx.duration);
     
     setActiveTab("live");
-    
-    // Build welcome chat message
     setChatMessages([
-      { sender: "system", text: `Workout session started with ${selectedTrainer}`, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+      { sender: "system", text: `Active session started with Coach ${selectedTrainer}`, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
     ]);
 
-    // Speak welcome
     setTimeout(() => {
-      speak(`Starting session. First exercise is ${firstEx.name}. Go for ${firstEx.duration} seconds.`);
-    }, 500);
+      speak(`Starting session. First is ${firstEx.name}. Ready, set, go!`);
+    }, 400);
   };
 
   const pauseWorkout = () => {
@@ -314,18 +301,15 @@ export default function FlexAIPortal() {
   const skipExercise = () => {
     if (!workoutPlan) return;
     if (timerMode === "exercise") {
-      // Go to rest
       if (currentExerciseIndex < workoutPlan.length - 1) {
         setTimerMode("rest");
         setTimeLeft(workoutPlan[currentExerciseIndex].rest);
         setTotalDuration(workoutPlan[currentExerciseIndex].rest);
-        speak("Take a breath. Rest time.");
+        speak("Rest period. Recover now.");
       } else {
-        // Workout complete
         endWorkoutSuccess();
       }
     } else {
-      // Skip rest -> Go to next exercise
       const nextIndex = currentExerciseIndex + 1;
       setCurrentExerciseIndex(nextIndex);
       setTimerMode("exercise");
@@ -333,9 +317,8 @@ export default function FlexAIPortal() {
       setTotalDuration(workoutPlan[nextIndex].duration);
       
       const nextEx = workoutPlan[nextIndex];
-      speak(`Next exercise: ${nextEx.name}. ${nextEx.duration} seconds. Let's do it!`);
+      speak(`Next up: ${nextEx.name}. Go!`);
       
-      // Request cue update from socket
       if (socketRef.current && wsConnected) {
         socketRef.current.send(JSON.stringify({
           type: "cue_request",
@@ -351,16 +334,16 @@ export default function FlexAIPortal() {
     setWorkoutActive(false);
     if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
     
-    speak(`Congratulations! You have completed your workout with Coach ${selectedTrainer}. Fantastic job!`);
+    speak(`Workout completed! Spectacular effort with Coach ${selectedTrainer}. Maintain the consistency!`);
     setChatMessages((prev) => [
       ...prev,
-      { sender: "system", text: "Workout Session completed successfully!", timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+      { sender: "system", text: "Workout completed!", timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
     ]);
     
-    alert("Workout complete! Awesome work!");
+    alert("Workout finished! Awesome job!");
   };
 
-  // Timer Tick Mechanism
+  // Timer Tick
   useEffect(() => {
     if (workoutActive && !workoutPaused) {
       timerIntervalRef.current = setInterval(() => {
@@ -368,22 +351,18 @@ export default function FlexAIPortal() {
           if (prev <= 1) {
             clearInterval(timerIntervalRef.current!);
             
-            // Trigger next state transition
             if (timerMode === "exercise") {
               if (workoutPlan && currentExerciseIndex < workoutPlan.length - 1) {
-                // Shift to Rest mode
                 setTimerMode("rest");
                 const restTime = workoutPlan[currentExerciseIndex].rest;
                 setTotalDuration(restTime);
-                speak("Rest period. Walk it off.");
+                speak("Time for a quick break.");
                 return restTime;
               } else {
-                // End of workout
                 endWorkoutSuccess();
                 return 0;
               }
             } else {
-              // End of rest -> Shift to next exercise
               const nextIndex = currentExerciseIndex + 1;
               setCurrentExerciseIndex(nextIndex);
               setTimerMode("exercise");
@@ -413,18 +392,18 @@ export default function FlexAIPortal() {
     };
   }, [workoutActive, workoutPaused, timerMode, currentExerciseIndex, workoutPlan, wsConnected]);
 
-  // Circumference calculation for circular timer
-  const radius = 100;
+  // Radius for SVG timer circle
+  const radius = 90;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = totalDuration > 0 ? circumference - (timeLeft / totalDuration) * circumference : 0;
 
   return (
-    <div className="app-container">
-      {/* Header / Navbar */}
+    <div className={`app-container theme-${selectedTrainer}`}>
+      {/* Desktop Header */}
       <header className="navbar">
         <div className="brand">
           <span className="brand-icon">⚡</span>
-          <span>FLEXAI // AI COACH</span>
+          <span>FLEXAI // COCH</span>
         </div>
         
         <nav className="nav-tabs">
@@ -450,7 +429,7 @@ export default function FlexAIPortal() {
               }
             }}
           >
-            {workoutActive ? "🔴 Live Session" : "Live Player"}
+            {workoutActive ? "🔴 Live Player" : "Live Player"}
           </button>
           <button 
             className={`nav-tab-btn ${activeTab === "nutrition" ? "active" : ""}`}
@@ -460,14 +439,14 @@ export default function FlexAIPortal() {
           </button>
         </nav>
 
-        {/* Global Controls */}
-        <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+        {/* Global toggles / stats */}
+        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
           <button 
             className="btn btn-secondary"
-            style={{ padding: "6px 12px", fontSize: "0.8rem", borderRadius: "8px" }}
+            style={{ padding: "6px 12px", fontSize: "0.75rem", borderRadius: "8px" }}
             onClick={() => setVoiceEnabled(!voiceEnabled)}
           >
-            {voiceEnabled ? "🔊 Voice On" : "🔇 Voice Muted"}
+            {voiceEnabled ? "🔊 Voice On" : "🔇 Muted"}
           </button>
           <div className="stat-pill">
             <span>Streak</span>
@@ -476,16 +455,16 @@ export default function FlexAIPortal() {
         </div>
       </header>
 
-      {/* Main Container */}
+      {/* Main Panel */}
       <main className="main-content">
         {errorMsg && (
           <div style={{
-            background: "rgba(239, 68, 68, 0.15)",
+            background: "rgba(239, 68, 68, 0.1)",
             border: "1px solid var(--error)",
-            color: "#ffffff",
+            color: "#ff8888",
             padding: "12px 16px",
-            borderRadius: "12px",
-            fontSize: "0.9rem"
+            borderRadius: "14px",
+            fontSize: "0.85rem"
           }}>
             ⚠️ {errorMsg}
           </div>
@@ -493,15 +472,15 @@ export default function FlexAIPortal() {
 
         {/* Tab 1: Dashboard */}
         {activeTab === "dashboard" && (
-          <div className="glass-panel" style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
-            <div style={{ borderBottom: "1px solid var(--border-muted)", paddingBottom: "16px" }}>
-              <h2 style={{ fontSize: "1.8rem" }}>Meet Your AI Training Staff</h2>
-              <p style={{ color: "var(--text-muted)", marginTop: "6px" }}>
-                Select your specialized coach. Their personality, instructions, and audio voices adjust dynamically to support your fitness level.
+          <div className="glass-panel glow-primary" style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+            <div style={{ borderBottom: "1px solid var(--border-muted)", paddingBottom: "12px" }}>
+              <h2 style={{ fontSize: "1.6rem" }}>Select Your AI Gym Coach</h2>
+              <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "4px" }}>
+                Select a trainer card below. The interface theme, fonts, prompts, and spoken speech synthesis change immediately.
               </p>
             </div>
 
-            {/* Trainer Grid */}
+            {/* Trainer Cards */}
             <div className="grid-3">
               {/* Max */}
               <div 
@@ -513,17 +492,17 @@ export default function FlexAIPortal() {
                   <span className="trainer-badge" style={{ backgroundColor: "var(--accent-orange)", color: "#000" }}>Strength</span>
                 </div>
                 <div className="trainer-info">
-                  <div className="trainer-name">Max <span style={{ fontSize: "0.9rem", color: "var(--text-dim)" }}>(Strength Coach)</span></div>
-                  <div className="trainer-specialty">Hypertrophy, Muscle Gain & Powerlifting</div>
+                  <div className="trainer-name">Max</div>
+                  <div className="trainer-specialty">Strength & Muscle Overload</div>
                   <p className="trainer-bio">
                     Dedicated strength specialist. Focuses on heavy weights, perfect range of motion, and high-energy encouragement.
                   </p>
                   <button 
                     className="btn btn-secondary" 
-                    style={{ width: "100%", fontSize: "0.85rem" }}
+                    style={{ width: "100%", fontSize: "0.8rem", borderRadius: "10px", padding: "8px" }}
                     onClick={(e) => { e.stopPropagation(); playTrainerIntro("Max"); }}
                   >
-                    🗣️ Listen to Intro
+                    🗣️ Hear Intro
                   </button>
                 </div>
               </div>
@@ -535,20 +514,20 @@ export default function FlexAIPortal() {
               >
                 <div className="trainer-img-placeholder" style={{ color: "var(--accent-violet)" }}>
                   🧘
-                  <span className="trainer-badge" style={{ backgroundColor: "var(--accent-violet)", color: "#fff" }}>Yoga/Core</span>
+                  <span className="trainer-badge" style={{ backgroundColor: "var(--accent-violet)", color: "#000" }}>Yoga/Core</span>
                 </div>
                 <div className="trainer-info">
-                  <div className="trainer-name">Serena <span style={{ fontSize: "0.9rem", color: "var(--text-dim)" }}>(Yoga Guru)</span></div>
-                  <div className="trainer-specialty">Mobility, Flexibility & Core Rejuvenation</div>
+                  <div className="trainer-name">Serena</div>
+                  <div className="trainer-specialty">Yoga Flow & Mobility</div>
                   <p className="trainer-bio">
                     Focuses on alignment, slow controlled flow, breathing cycles, and full recovery. Perfect for active restoration.
                   </p>
                   <button 
                     className="btn btn-secondary" 
-                    style={{ width: "100%", fontSize: "0.85rem" }}
+                    style={{ width: "100%", fontSize: "0.8rem", borderRadius: "10px", padding: "8px" }}
                     onClick={(e) => { e.stopPropagation(); playTrainerIntro("Serena"); }}
                   >
-                    🗣️ Listen to Intro
+                    🗣️ Hear Intro
                   </button>
                 </div>
               </div>
@@ -563,42 +542,42 @@ export default function FlexAIPortal() {
                   <span className="trainer-badge" style={{ backgroundColor: "var(--accent-pink)", color: "#000" }}>HIIT</span>
                 </div>
                 <div className="trainer-info">
-                  <div className="trainer-name">Leo <span style={{ fontSize: "0.9rem", color: "var(--text-dim)" }}>(HIIT Coach)</span></div>
-                  <div className="trainer-specialty">High Intensity, Cardio Conditioning & Fat Loss</div>
+                  <div className="trainer-name">Leo</div>
+                  <div className="trainer-specialty">HIIT & Cardiovascular Burn</div>
                   <p className="trainer-bio">
                     Fast pacing and extreme cardio endurance. Leo is relentless, keeps the timer ticking, and pushes your cardiovascular limit.
                   </p>
                   <button 
                     className="btn btn-secondary" 
-                    style={{ width: "100%", fontSize: "0.85rem" }}
+                    style={{ width: "100%", fontSize: "0.8rem", borderRadius: "10px", padding: "8px" }}
                     onClick={(e) => { e.stopPropagation(); playTrainerIntro("Leo"); }}
                   >
-                    🗣️ Listen to Intro
+                    🗣️ Hear Intro
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Summary / Stats Display */}
-            <div className="grid-2" style={{ marginTop: "12px" }}>
-              <div className="glass-panel" style={{ background: "rgba(255,255,255,0.01)" }}>
-                <h3 style={{ marginBottom: "12px", fontSize: "1.1rem" }}>Today's Vital Metrics</h3>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                  <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px", borderRadius: "12px" }}>
-                    <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>HEART RATE</div>
-                    <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--secondary)", marginTop: "4px" }}>78 BPM</div>
+            {/* Performance Stats Cards */}
+            <div className="grid-2">
+              <div className="glass-panel" style={{ background: "rgba(0,0,0,0.15)" }}>
+                <h3 style={{ fontSize: "1rem", marginBottom: "12px" }}>Daily Stats</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  <div style={{ background: "rgba(255,255,255,0.02)", padding: "12px", borderRadius: "12px", border: "1px solid var(--border-muted)" }}>
+                    <div style={{ fontSize: "0.7rem", color: "var(--text-dim)" }}>HEART RATE</div>
+                    <div style={{ fontSize: "1.25rem", fontWeight: 800, color: "var(--secondary)", marginTop: "2px" }}>74 BPM</div>
                   </div>
-                  <div style={{ background: "rgba(0,0,0,0.2)", padding: "16px", borderRadius: "12px" }}>
-                    <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>EST. CALORIES</div>
-                    <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--primary)", marginTop: "4px" }}>320 KCAL</div>
+                  <div style={{ background: "rgba(255,255,255,0.02)", padding: "12px", borderRadius: "12px", border: "1px solid var(--border-muted)" }}>
+                    <div style={{ fontSize: "0.7rem", color: "var(--text-dim)" }}>CALORIES</div>
+                    <div style={{ fontSize: "1.25rem", fontWeight: 800, color: "var(--primary)", marginTop: "2px" }}>320 KCAL</div>
                   </div>
                 </div>
               </div>
 
-              <div className="glass-panel" style={{ display: "flex", flexDirection: "column", justifyContent: "center", background: "rgba(255,255,255,0.01)" }}>
-                <h3 style={{ marginBottom: "6px", fontSize: "1.1rem" }}>Selected Coach: Coach {selectedTrainer}</h3>
-                <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
-                  Your workout sessions and real-time support requests will be handled by Coach {selectedTrainer}. Switch your trainer anytime by selecting their card above.
+              <div className="glass-panel" style={{ background: "rgba(0,0,0,0.15)", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                <h3 style={{ fontSize: "1rem", marginBottom: "4px" }}>Coach Assigned: Coach {selectedTrainer}</h3>
+                <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", lineHeight: "1.4" }}>
+                  Your live workouts, voices, prompts, and corrections will be processed by Coach {selectedTrainer}. Click Workout Builder to start configuring.
                 </p>
               </div>
             </div>
@@ -608,9 +587,9 @@ export default function FlexAIPortal() {
         {/* Tab 2: Workout Builder */}
         {activeTab === "workout" && (
           <div className="grid-2">
-            {/* Control Panel */}
-            <div className="glass-panel" style={{ height: "fit-content" }}>
-              <h2 style={{ marginBottom: "20px" }}>Configure Your AI Routine</h2>
+            {/* Left Parameters */}
+            <div className="glass-panel glow-primary" style={{ height: "fit-content" }}>
+              <h2 style={{ fontSize: "1.4rem", marginBottom: "16px" }}>Configure Your AI Routine</h2>
               
               <div className="form-group">
                 <label className="form-label">Active Goal</label>
@@ -632,8 +611,8 @@ export default function FlexAIPortal() {
                   value={workoutParams.level}
                   onChange={(e) => setWorkoutParams({...workoutParams, level: e.target.value})}
                 >
-                  <option value="Beginner">Beginner (Slow pace, gentle form)</option>
-                  <option value="Intermediate">Intermediate (Standard sets)</option>
+                  <option value="Beginner">Beginner (Perfecting form)</option>
+                  <option value="Intermediate">Intermediate (Standard splits)</option>
                   <option value="Advanced">Advanced (High reps, low rest)</option>
                 </select>
               </div>
@@ -645,10 +624,10 @@ export default function FlexAIPortal() {
                   value={workoutParams.duration}
                   onChange={(e) => setWorkoutParams({...workoutParams, duration: parseInt(e.target.value)})}
                 >
-                  <option value={15}>15 Minutes (Express Blast)</option>
-                  <option value={30}>30 Minutes (Recommended)</option>
-                  <option value={45}>45 Minutes (Full Session)</option>
-                  <option value={60}>60 Minutes (Elite Endurance)</option>
+                  <option value={15}>15 Mins (Express Blast)</option>
+                  <option value={30}>30 Mins (Recommended)</option>
+                  <option value={45}>45 Mins (Full Session)</option>
+                  <option value={60}>60 Mins (Elite Conditioning)</option>
                 </select>
               </div>
 
@@ -667,7 +646,7 @@ export default function FlexAIPortal() {
 
               <button 
                 className="btn" 
-                style={{ width: "100%", marginTop: "12px" }}
+                style={{ width: "100%", marginTop: "8px" }}
                 disabled={workoutGenerating}
                 onClick={fetchWorkout}
               >
@@ -675,14 +654,14 @@ export default function FlexAIPortal() {
               </button>
             </div>
 
-            {/* Workout Display */}
-            <div className="glass-panel" style={{ display: "flex", flexDirection: "column" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-                <h2>Your Custom Workout Routine</h2>
+            {/* Right Results list */}
+            <div className="glass-panel" style={{ display: "flex", flexDirection: "column", minHeight: "350px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "10px" }}>
+                <h2 style={{ fontSize: "1.4rem" }}>Your Exercises</h2>
                 {workoutPlan && (
                   <button 
                     className="btn" 
-                    style={{ background: "var(--success)", color: "#fff", padding: "8px 16px", fontSize: "0.85rem" }}
+                    style={{ background: "var(--primary)", color: "#000", padding: "8px 16px", fontSize: "0.8rem", borderRadius: "10px" }}
                     onClick={startWorkoutSession}
                   >
                     ⚡ Start Session
@@ -691,29 +670,26 @@ export default function FlexAIPortal() {
               </div>
 
               {!workoutPlan ? (
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "300px", color: "var(--text-muted)" }}>
-                  <span style={{ fontSize: "3rem" }}>📋</span>
-                  <p style={{ marginTop: "12px" }}>No active routine generated yet.</p>
-                  <p style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>Use the left panel to configure and build your custom AI workout plan.</p>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--text-dim)", textAlign: "center" }}>
+                  <span style={{ fontSize: "2.5rem" }}>📋</span>
+                  <p style={{ marginTop: "12px", fontSize: "0.9rem" }}>No plan active.</p>
+                  <p style={{ fontSize: "0.75rem" }}>Configure settings on the left and click Generate.</p>
                 </div>
               ) : (
-                <div style={{ overflowY: "auto", flex: 1, maxHeight: "450px" }}>
-                  <div style={{ background: "rgba(163, 230, 53, 0.05)", border: "1px dashed var(--primary)", borderRadius: "12px", padding: "12px", marginBottom: "16px", fontSize: "0.85rem" }}>
-                    <strong>ℹ️ Custom Coach Notice:</strong> Generated from {workoutGenerating ? "AI Engine" : "the backend system"}. Review the details below. Click "Start Session" to begin.
-                  </div>
+                <div style={{ overflowY: "auto", flex: 1, maxHeight: "420px" }}>
                   {workoutPlan.map((ex, index) => (
                     <div key={index} className="workout-item-card">
                       <div className="workout-item-left">
                         <span className="workout-item-title">{index + 1}. {ex.name}</span>
                         <span className="workout-item-meta">{ex.description}</span>
-                        <div style={{ display: "flex", gap: "6px" }}>
+                        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                           <span className="workout-item-tag">{ex.muscleGroup}</span>
-                          <span className="workout-item-tag" style={{ background: "rgba(14, 165, 233, 0.08)", color: "var(--secondary)" }}>
+                          <span className="workout-item-tag" style={{ border: "1px solid var(--secondary)", color: "var(--secondary)" }}>
                             ⏱️ {ex.duration}s Active
                           </span>
                         </div>
                       </div>
-                      <div style={{ textAlign: "right", fontSize: "0.75rem", color: "var(--primary)", maxWidth: "160px", borderLeft: "1px solid var(--border-muted)", paddingLeft: "12px" }}>
+                      <div className="workout-item-tip">
                         <em>"{ex.tip}"</em>
                       </div>
                     </div>
@@ -724,52 +700,56 @@ export default function FlexAIPortal() {
           </div>
         )}
 
-        {/* Tab 3: Live Workout Player */}
+        {/* Tab 3: Live Player */}
         {activeTab === "live" && (
           <div className="grid-2">
-            {/* Active player and controls */}
-            <div className="glass-panel" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+            {/* Active player controller */}
+            <div className="glass-panel glow-primary" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "350px" }}>
               {!workoutActive ? (
-                <div style={{ textAlign: "center", padding: "40px 0" }}>
-                  <span style={{ fontSize: "3rem" }}>⏱️</span>
-                  <h3 style={{ marginTop: "16px", fontSize: "1.4rem" }}>No Session Running</h3>
-                  <p style={{ color: "var(--text-muted)", marginTop: "8px" }}>
-                    Configure a workout plan in the Builder tab and click "Start Session" to launch the voice coach.
+                <div style={{ textAlign: "center" }}>
+                  <span style={{ fontSize: "2.5rem" }}>⏱️</span>
+                  <h3 style={{ marginTop: "12px", fontSize: "1.2rem" }}>No Active Session</h3>
+                  <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", marginTop: "4px" }}>
+                    Build a workout plan first, then click "Start Session" to initiate audio triggers.
                   </p>
                   <button 
                     className="btn" 
-                    style={{ marginTop: "20px" }}
+                    style={{ marginTop: "16px" }}
                     onClick={() => setActiveTab("workout")}
                   >
-                    Go to Workout Builder
+                    Configure Workout
                   </button>
                 </div>
               ) : (
                 <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", width: "100%", alignItems: "center" }}>
-                    <div>
-                      <span className="trainer-badge" style={{ backgroundColor: selectedTrainer === "Max" ? "var(--accent-orange)" : selectedTrainer === "Serena" ? "var(--accent-violet)" : "var(--accent-pink)", color: "#000", position: "static" }}>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <span className="trainer-badge" style={{ backgroundColor: "var(--primary)", color: "#000", position: "static" }}>
                         Coach {selectedTrainer}
                       </span>
+                      <div className="heart-beat-container">
+                        <span className="heart-icon">❤️</span>
+                        <span>Pulse: <strong>{simulatedHeartRate}</strong></span>
+                      </div>
                     </div>
-                    <div style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
-                      Exercise {currentExerciseIndex + 1} of {workoutPlan?.length || 0}
+                    <div style={{ color: "var(--text-muted)", fontSize: "0.8rem", fontWeight: 700 }}>
+                      Set {currentExerciseIndex + 1} of {workoutPlan?.length || 0}
                     </div>
                   </div>
 
-                  {/* Circular Timer */}
+                  {/* Circular visual timer */}
                   <div className="timer-container">
                     <svg className="timer-circle-svg">
                       <circle 
                         className="timer-circle-bg" 
-                        cx="120" 
-                        cy="120" 
+                        cx="100" 
+                        cy="100" 
                         r={radius} 
                       />
                       <circle 
                         className="timer-circle-progress" 
-                        cx="120" 
-                        cy="120" 
+                        cx="100" 
+                        cy="100" 
                         r={radius} 
                         strokeDasharray={circumference}
                         strokeDashoffset={strokeDashoffset}
@@ -784,24 +764,24 @@ export default function FlexAIPortal() {
                     </div>
                   </div>
 
-                  {/* Details */}
-                  <div style={{ textAlign: "center", marginBottom: "28px" }}>
-                    <h3 style={{ fontSize: "1.6rem", marginBottom: "8px" }}>
-                      {timerMode === "rest" ? "Rest Period" : workoutPlan?.[currentExerciseIndex]?.name}
+                  {/* Descriptions */}
+                  <div style={{ textAlign: "center", marginBottom: "20px" }}>
+                    <h3 style={{ fontSize: "1.35rem", marginBottom: "6px" }}>
+                      {timerMode === "rest" ? "Take a Breath" : workoutPlan?.[currentExerciseIndex]?.name}
                     </h3>
-                    <p style={{ color: "var(--text-muted)", fontSize: "0.95rem", maxWidth: "400px", margin: "0 auto" }}>
+                    <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", maxWidth: "350px", margin: "0 auto", lineHeight: "1.4" }}>
                       {timerMode === "rest" 
-                        ? `Prepare for next: ${workoutPlan?.[currentExerciseIndex + 1]?.name || "Cooldown"}`
+                        ? `Get ready for: ${workoutPlan?.[currentExerciseIndex + 1]?.name || "Cooldown"}`
                         : workoutPlan?.[currentExerciseIndex]?.description
                       }
                     </p>
                   </div>
 
-                  {/* Player Buttons */}
-                  <div style={{ display: "flex", gap: "16px" }}>
+                  {/* Action buttons */}
+                  <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "center" }}>
                     <button 
                       className={`btn ${workoutPaused ? "btn" : "btn-secondary"}`}
-                      style={{ minWidth: "120px" }}
+                      style={{ minWidth: "100px", padding: "10px 16px", fontSize: "0.85rem" }}
                       onClick={pauseWorkout}
                     >
                       {workoutPaused ? "▶️ Resume" : "⏸️ Pause"}
@@ -809,45 +789,45 @@ export default function FlexAIPortal() {
                     
                     <button 
                       className="btn" 
-                      style={{ background: "var(--secondary)", color: "#fff", minWidth: "120px" }}
+                      style={{ background: "var(--secondary)", color: "#fff", minWidth: "100px", padding: "10px 16px", fontSize: "0.85rem" }}
                       onClick={skipExercise}
                     >
-                      ⏭️ Skip {timerMode === "exercise" ? "Rest" : "Next"}
+                      ⏭️ Skip
                     </button>
 
                     <button 
                       className="btn" 
-                      style={{ background: "var(--error)", color: "#fff" }}
+                      style={{ background: "var(--error)", color: "#fff", padding: "10px 16px", fontSize: "0.85rem" }}
                       onClick={() => {
-                        if (confirm("Are you sure you want to quit the active session?")) {
+                        if (confirm("Stop the active session?")) {
                           setWorkoutActive(false);
                           speak("Workout session cancelled.");
                         }
                       }}
                     >
-                      ⏹️ Stop
+                      ⏹️ End
                     </button>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Coach Voice Helper Chat */}
-            <div className="glass-panel" style={{ display: "flex", flexDirection: "column" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                <h3>Real-time Trainer Dialogue</h3>
-                <span style={{ fontSize: "0.8rem", color: wsConnected ? "var(--success)" : "var(--text-dim)" }}>
-                  ● {wsConnected ? "WebSocket Connected" : "Local Response Mode"}
+            {/* Right dynamic voice dialogue chat */}
+            <div className="glass-panel" style={{ display: "flex", flexDirection: "column", height: "fit-content" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "6px" }}>
+                <h3 style={{ fontSize: "1.1rem" }}>Trainer Response Node</h3>
+                <span style={{ fontSize: "0.75rem", color: wsConnected ? "var(--success)" : "var(--text-dim)", fontWeight: 700 }}>
+                  ● {wsConnected ? "WebSocket Online" : "Offline Backup Mode"}
                 </span>
               </div>
 
-              {/* Chat log */}
+              {/* Chat messages wrapper */}
               <div className="coach-chat-box">
                 <div className="coach-chat-messages">
                   {chatMessages.length === 0 ? (
-                    <div style={{ display: "flex", flexDirection: "column", height: "100%", alignItems: "center", justifyContent: "center", color: "var(--text-dim)", fontSize: "0.85rem", textAlign: "center" }}>
-                      <span>💬 Dialogue history with Coach {selectedTrainer} will appear here.</span>
-                      <span>Ask form tips or tell them if you are feeling tired.</span>
+                    <div style={{ display: "flex", flexDirection: "column", height: "100%", alignItems: "center", justifyContent: "center", color: "var(--text-dim)", fontSize: "0.8rem", textAlign: "center" }}>
+                      <span>💬 Real-time dialogues with Coach {selectedTrainer} appear here.</span>
+                      <span>Ask custom tips or select quick triggers below.</span>
                     </div>
                   ) : (
                     chatMessages.map((msg, idx) => (
@@ -855,7 +835,7 @@ export default function FlexAIPortal() {
                         key={idx} 
                         className={`chat-bubble ${msg.sender}`}
                       >
-                        <div style={{ fontSize: "0.7rem", color: "var(--text-dim)", marginBottom: "4px" }}>
+                        <div style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.4)", marginBottom: "4px" }}>
                           {msg.sender === "user" ? "You" : msg.sender === "trainer" ? `Coach ${selectedTrainer}` : "System"} • {msg.timestamp}
                         </div>
                         {msg.text}
@@ -865,35 +845,28 @@ export default function FlexAIPortal() {
                   <div ref={chatEndRef} />
                 </div>
 
-                {/* Quick Prompts */}
-                <div style={{ display: "flex", gap: "6px", padding: "8px", overflowX: "auto", borderTop: "1px solid var(--border-muted)", background: "rgba(0,0,0,0.15)" }}>
+                {/* Mobile-friendly quick prompts */}
+                <div style={{ display: "flex", gap: "6px", padding: "6px", overflowX: "auto", borderTop: "1px solid var(--border-muted)", background: "rgba(0,0,0,0.2)" }}>
                   <button 
                     className="nav-tab-btn" 
-                    style={{ fontSize: "0.75rem", padding: "4px 8px", background: "rgba(255,255,255,0.05)" }}
+                    style={{ fontSize: "0.7rem", padding: "4px 8px", background: "rgba(255,255,255,0.03)" }}
                     onClick={() => sendChatMessage("I'm feeling really tired, can I slow down?")}
                   >
                     😩 I'm tired
                   </button>
                   <button 
                     className="nav-tab-btn" 
-                    style={{ fontSize: "0.75rem", padding: "4px 8px", background: "rgba(255,255,255,0.05)" }}
+                    style={{ fontSize: "0.7rem", padding: "4px 8px", background: "rgba(255,255,255,0.03)" }}
                     onClick={() => sendChatMessage("My knees are hurting during squats, any advice?")}
                   >
                     💥 Knee hurts
                   </button>
                   <button 
                     className="nav-tab-btn" 
-                    style={{ fontSize: "0.75rem", padding: "4px 8px", background: "rgba(255,255,255,0.05)" }}
+                    style={{ fontSize: "0.7rem", padding: "4px 8px", background: "rgba(255,255,255,0.03)" }}
                     onClick={() => sendChatMessage("Give me a quick burst of extreme motivation!")}
                   >
                     🔥 Motivate me!
-                  </button>
-                  <button 
-                    className="nav-tab-btn" 
-                    style={{ fontSize: "0.75rem", padding: "4px 8px", background: "rgba(255,255,255,0.05)" }}
-                    onClick={() => sendChatMessage("Explain the correct form of the current exercise.")}
-                  >
-                    ❓ Check Form
                   </button>
                 </div>
 
@@ -902,7 +875,7 @@ export default function FlexAIPortal() {
                   <input 
                     type="text" 
                     className="coach-chat-input"
-                    placeholder={`Ask Coach ${selectedTrainer} a question...`}
+                    placeholder={`Ask Coach ${selectedTrainer}...`}
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
                     onKeyDown={(e) => {
@@ -911,7 +884,7 @@ export default function FlexAIPortal() {
                   />
                   <button 
                     className="btn"
-                    style={{ borderRadius: "10px", padding: "8px 16px" }}
+                    style={{ borderRadius: "10px", padding: "8px 14px", fontSize: "0.8rem" }}
                     onClick={() => sendChatMessage("")}
                   >
                     Send
@@ -925,12 +898,12 @@ export default function FlexAIPortal() {
         {/* Tab 4: Nutrition Planner */}
         {activeTab === "nutrition" && (
           <div className="grid-2">
-            {/* Inputs */}
-            <div className="glass-panel" style={{ height: "fit-content" }}>
-              <h2 style={{ marginBottom: "20px" }}>AI Meal Plan Settings</h2>
+            {/* Input Configurator */}
+            <div className="glass-panel glow-primary" style={{ height: "fit-content" }}>
+              <h2 style={{ fontSize: "1.4rem", marginBottom: "16px" }}>AI Meal Plan Config</h2>
 
               <div className="form-group">
-                <label className="form-label">Primary Goal</label>
+                <label className="form-label">Fitness Goal</label>
                 <select 
                   className="form-select"
                   value={mealParams.goal}
@@ -938,27 +911,27 @@ export default function FlexAIPortal() {
                 >
                   <option value="Lose Weight">📉 Weight Loss / Shred</option>
                   <option value="Build Muscle">📈 Lean Bulk / Muscle Gain</option>
-                  <option value="Maintain Fitness">⚖️ Maintenance / Athletic Performance</option>
+                  <option value="Maintain Fitness">⚖️ Maintenance / Performance</option>
                 </select>
               </div>
 
               <div className="form-group">
-                <label className="form-label">Dietary Preference</label>
+                <label className="form-label">Dietary Style</label>
                 <select 
                   className="form-select"
                   value={mealParams.dietType}
                   onChange={(e) => setMealParams({...mealParams, dietType: e.target.value})}
                 >
-                  <option value="Balanced">Balanced (Standard clean eating)</option>
+                  <option value="Balanced">Balanced (Clean eating)</option>
                   <option value="High Protein">High Protein / Low Carb</option>
-                  <option value="Vegan">Vegan (100% plant-based)</option>
-                  <option value="Vegetarian">Vegetarian (No meat, eggs/dairy allowed)</option>
-                  <option value="Keto">Ketogenic (Very low carb, high fat)</option>
+                  <option value="Vegan">Vegan (100% Plant-based)</option>
+                  <option value="Vegetarian">Vegetarian</option>
+                  <option value="Keto">Ketogenic (Low Carb, High Fat)</option>
                 </select>
               </div>
 
               <div className="form-group">
-                <label className="form-label">Daily Calories Limit: {mealParams.calories} kcal</label>
+                <label className="form-label">Target Calories: {mealParams.calories} kcal</label>
                 <input 
                   type="range" 
                   min="1200" 
@@ -979,7 +952,7 @@ export default function FlexAIPortal() {
 
               <button 
                 className="btn" 
-                style={{ width: "100%", marginTop: "12px" }}
+                style={{ width: "100%", marginTop: "8px" }}
                 disabled={mealGenerating}
                 onClick={fetchMealPlan}
               >
@@ -987,36 +960,36 @@ export default function FlexAIPortal() {
               </button>
             </div>
 
-            {/* Display */}
+            {/* Display Outputs */}
             <div className="glass-panel" style={{ display: "flex", flexDirection: "column" }}>
-              <h2>Your Custom Nutrition Guide</h2>
+              <h2 style={{ fontSize: "1.4rem", marginBottom: "16px" }}>Your Diet Profile</h2>
 
               {!mealPlan ? (
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "320px", color: "var(--text-muted)" }}>
-                  <span style={{ fontSize: "3rem" }}>🥗</span>
-                  <p style={{ marginTop: "12px" }}>No meal plan generated yet.</p>
-                  <p style={{ fontSize: "0.8rem", color: "var(--text-dim)" }}>Configure your goals and click generate to create a custom diet profile.</p>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--text-dim)", minHeight: "280px" }}>
+                  <span style={{ fontSize: "2.5rem" }}>🥗</span>
+                  <p style={{ marginTop: "12px", fontSize: "0.9rem" }}>No meal plan generated.</p>
+                  <p style={{ fontSize: "0.75rem" }}>Adjust parameters on the left and click Generate.</p>
                 </div>
               ) : (
-                <div style={{ overflowY: "auto", flex: 1, maxHeight: "450px", marginTop: "16px" }}>
+                <div style={{ overflowY: "auto", flex: 1, maxHeight: "420px" }}>
                   
-                  {/* Macros Badge */}
-                  <div style={{ display: "flex", gap: "10px", marginBottom: "20px", background: "rgba(255,255,255,0.03)", padding: "12px", borderRadius: "12px", border: "1px solid var(--border-muted)" }}>
+                  {/* Macros Badges */}
+                  <div style={{ display: "flex", gap: "8px", marginBottom: "16px", background: "rgba(255,255,255,0.02)", padding: "10px", borderRadius: "12px", border: "1px solid var(--border-muted)" }}>
                     <div style={{ flex: 1, textAlign: "center" }}>
-                      <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>CARBS</div>
-                      <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--secondary)" }}>{mealPlan.Macros?.Carbs || "N/A"}</div>
+                      <div style={{ fontSize: "0.65rem", color: "var(--text-dim)" }}>CARBS</div>
+                      <div style={{ fontSize: "1rem", fontWeight: 800, color: "var(--secondary)" }}>{mealPlan.Macros?.Carbs || "N/A"}</div>
                     </div>
                     <div style={{ flex: 1, textAlign: "center", borderLeft: "1px solid var(--border-muted)", borderRight: "1px solid var(--border-muted)" }}>
-                      <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>PROTEIN</div>
-                      <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--primary)" }}>{mealPlan.Macros?.Protein || "N/A"}</div>
+                      <div style={{ fontSize: "0.65rem", color: "var(--text-dim)" }}>PROTEIN</div>
+                      <div style={{ fontSize: "1rem", fontWeight: 800, color: "var(--primary)" }}>{mealPlan.Macros?.Protein || "N/A"}</div>
                     </div>
                     <div style={{ flex: 1, textAlign: "center" }}>
-                      <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>FAT</div>
-                      <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--accent-orange)" }}>{mealPlan.Macros?.Fat || "N/A"}</div>
+                      <div style={{ fontSize: "0.65rem", color: "var(--text-dim)" }}>FAT</div>
+                      <div style={{ fontSize: "1rem", fontWeight: 800, color: "var(--accent-orange)" }}>{mealPlan.Macros?.Fat || "N/A"}</div>
                     </div>
                   </div>
 
-                  {/* Meals */}
+                  {/* Meal list */}
                   <div className="meal-card">
                     <div className="meal-time">Breakfast</div>
                     <div className="meal-name">{mealPlan.Breakfast}</div>
@@ -1037,13 +1010,13 @@ export default function FlexAIPortal() {
                     <div className="meal-name">{mealPlan.Dinner}</div>
                   </div>
 
-                  {/* Shopping List */}
+                  {/* Checklist */}
                   {mealPlan.Shopping && mealPlan.Shopping.length > 0 && (
-                    <div style={{ marginTop: "24px", borderTop: "1px solid var(--border-muted)", paddingTop: "16px" }}>
-                      <h4 style={{ marginBottom: "12px", fontSize: "1rem" }}>🛒 Smart Shopping List Checklist</h4>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                    <div style={{ marginTop: "20px", borderTop: "1px solid var(--border-muted)", paddingTop: "14px" }}>
+                      <h4 style={{ marginBottom: "10px", fontSize: "0.95rem" }}>🛒 Shopping List Checklist</h4>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
                         {mealPlan.Shopping.map((item: string, idx: number) => (
-                          <label key={idx} style={{ display: "flex", gap: "8px", alignItems: "center", fontSize: "0.85rem", cursor: "pointer", color: "var(--text-muted)" }}>
+                          <label key={idx} style={{ display: "flex", gap: "6px", alignItems: "center", fontSize: "0.8rem", cursor: "pointer", color: "var(--text-muted)" }}>
                             <input type="checkbox" style={{ accentColor: "var(--primary)" }} />
                             <span>{item}</span>
                           </label>
@@ -1059,17 +1032,57 @@ export default function FlexAIPortal() {
         )}
       </main>
 
-      {/* Footer */}
-      <footer style={{
+      {/* Mobile Bottom Navigation Bar (PWA Essential) */}
+      <nav className="mobile-nav-bar">
+        <button 
+          className={`mobile-tab-btn ${activeTab === "dashboard" ? "active" : ""}`}
+          onClick={() => setActiveTab("dashboard")}
+        >
+          <span className="mobile-tab-btn-icon">🧘</span>
+          <span>Coaches</span>
+        </button>
+        
+        <button 
+          className={`mobile-tab-btn ${activeTab === "workout" ? "active" : ""}`}
+          onClick={() => setActiveTab("workout")}
+        >
+          <span className="mobile-tab-btn-icon">📋</span>
+          <span>Builder</span>
+        </button>
+        
+        <button 
+          className={`mobile-tab-btn ${activeTab === "live" ? "active" : ""}`}
+          onClick={() => {
+            if (!workoutActive && !workoutPlan) {
+              alert("Please generate a workout plan first!");
+            } else {
+              setActiveTab("live");
+            }
+          }}
+        >
+          <span className="mobile-tab-btn-icon">{workoutActive ? "🔴" : "⏱️"}</span>
+          <span>{workoutActive ? "Live Session" : "Player"}</span>
+        </button>
+        
+        <button 
+          className={`mobile-tab-btn ${activeTab === "nutrition" ? "active" : ""}`}
+          onClick={() => setActiveTab("nutrition")}
+        >
+          <span className="mobile-tab-btn-icon">🥗</span>
+          <span>Diet</span>
+        </button>
+      </nav>
+
+      {/* Desktop Footer only */}
+      <footer className="main-content" style={{
         textAlign: "center",
-        padding: "20px",
+        padding: "16px",
         fontSize: "0.75rem",
         color: "var(--text-dim)",
         borderTop: "1px solid var(--border-muted)",
-        background: "rgba(9, 9, 11, 0.4)",
         marginTop: "auto"
       }}>
-        FlexAI Portal • Powered by FastAPI & Gemini Flash • Real-time Coach Audio Engine
+        FlexAI Portal • Real-time Coach Audio Engine
       </footer>
     </div>
   );
