@@ -88,12 +88,21 @@ export default function FlexAIPortal() {
   const [superTab, setSuperTab] = useState<"owners" | "members">("owners");
 
   // Navigation & UI States
-  const [activeTab, setActiveTab] = useState<"dashboard" | "workout" | "live" | "nutrition">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "workout" | "live" | "nutrition" | "coach_report">("dashboard");
   const [adminTab, setAdminTab] = useState<"members" | "leads">("members");
   const [selectedTrainer, setSelectedTrainer] = useState<"Max" | "Serena" | "Leo">("Max");
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isActiveAccount, setIsActiveAccount] = useState(true);
+
+  // AI Coach Report States
+  const [reportGender, setReportGender] = useState<"Male" | "Female" | "">("");
+  const [reportActivityLevel, setReportActivityLevel] = useState<"Sedentary" | "Light" | "Moderate" | "Heavy" | "Athlete" | "">("");
+  const [reportWaist, setReportWaist] = useState<number | "">("");
+  const [reportNeck, setReportNeck] = useState<number | "">("");
+  const [reportHip, setReportHip] = useState<number | "">("");
+  const [reportOutput, setReportOutput] = useState<string>("");
+  const [generatingReport, setGeneratingReport] = useState(false);
 
   // Analytics & Broadcast States
   const [analyticsData, setAnalyticsData] = useState<{ peakHours: any, weeklyAttendance: any }>({ peakHours: {}, weeklyAttendance: {} });
@@ -553,6 +562,50 @@ export default function FlexAIPortal() {
       console.error(err);
     } finally {
       setSendingBroadcast(false);
+    }
+  };
+
+  // AI Fitness Coach Report Generator
+  const handleGenerateCoachReport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reportGender || !age || !height || !weight || !reportActivityLevel || !workoutParams.goal || !workoutParams.level) {
+      alert("Please fill in all the required body metrics (Gender, Age, Height, Weight, Activity Level) in the form!");
+      return;
+    }
+    setGeneratingReport(true);
+    setReportOutput("");
+    try {
+      const res = await fetch(getApiUrl("/api/generate-coach-report"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          gender: reportGender,
+          age: parseInt(age.toString()),
+          height: parseFloat(height.toString()),
+          weight: parseFloat(weight.toString()),
+          activityLevel: reportActivityLevel,
+          goal: workoutParams.goal,
+          experience: workoutParams.level,
+          waist: reportWaist ? parseFloat(reportWaist.toString()) : undefined,
+          neck: reportNeck ? parseFloat(reportNeck.toString()) : undefined,
+          hip: reportHip ? parseFloat(reportHip.toString()) : undefined
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === "success" && data.report) {
+          setReportOutput(data.report);
+        } else {
+          alert("Error: Failed to generate report.");
+        }
+      } else {
+        alert("Server error generating report.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Network error occurred.");
+    } finally {
+      setGeneratingReport(false);
     }
   };
 
@@ -3101,6 +3154,249 @@ export default function FlexAIPortal() {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Tab 5: AI Coach Report */}
+        {activeTab === "coach_report" && (
+          <div className="grid-2">
+            {/* Left Input Form */}
+            <div className="glass-panel glow-primary" style={{ height: "fit-content" }}>
+              <h2 style={{ fontSize: "1.4rem", marginBottom: "8px" }}>🤖 AI Coach Report Generator</h2>
+              <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "16px" }}>
+                Provide your measurements. The system will calculate precise biometrics, evaluate health indicators, and consult our AI expert coach for custom recommendations.
+              </p>
+
+              <form onSubmit={handleGenerateCoachReport} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                
+                {/* Gender Toggle */}
+                <div>
+                  <label className="form-label" style={{ fontSize: "0.75rem" }}>Gender (Required)</label>
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    {["Male", "Female"].map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        className={`nav-tab-btn ${reportGender === g ? "active" : ""}`}
+                        style={{ flex: 1, padding: "8px", fontSize: "0.8rem" }}
+                        onClick={() => setReportGender(g as any)}
+                      >
+                        {g === "Male" ? "♂️ Male" : "♀️ Female"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Age, Height, Weight group */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontSize: "0.75rem" }}>Age (Yrs)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      required
+                      placeholder="Age"
+                      value={age}
+                      onChange={(e) => setAge(e.target.value === "" ? "" : parseInt(e.target.value))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontSize: "0.75rem" }}>Height (cm)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      required
+                      placeholder="Height"
+                      value={height}
+                      onChange={(e) => setHeight(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontSize: "0.75rem" }}>Weight (kg)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      required
+                      placeholder="Weight"
+                      value={weight}
+                      onChange={(e) => setWeight(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                    />
+                  </div>
+                </div>
+
+                {/* Activity Level */}
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: "0.75rem" }}>Activity Level</label>
+                  <select
+                    className="form-select"
+                    required
+                    value={reportActivityLevel}
+                    onChange={(e) => setReportActivityLevel(e.target.value as any)}
+                  >
+                    <option value="">Select Activity Level...</option>
+                    <option value="Sedentary">Sedentary (Little or no exercise)</option>
+                    <option value="Light">Light Exercise (1-3 days/week)</option>
+                    <option value="Moderate">Moderate Exercise (3-5 days/week)</option>
+                    <option value="Heavy">Heavy Exercise (6-7 days/week)</option>
+                    <option value="Athlete">Athlete (Hard daily exercise/sports)</option>
+                  </select>
+                </div>
+
+                {/* Fitness Goal & Experience */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontSize: "0.75rem" }}>Fitness Goal</label>
+                    <select
+                      className="form-select"
+                      required
+                      value={workoutParams.goal}
+                      onChange={(e) => setWorkoutParams({ ...workoutParams, goal: e.target.value })}
+                    >
+                      <option value="Build Muscle">Build Muscle</option>
+                      <option value="Lose Fat">Lose Fat</option>
+                      <option value="Body Recomposition">Body Recomposition</option>
+                      <option value="Maintain Weight">Maintain Weight</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" style={{ fontSize: "0.75rem" }}>Experience Level</label>
+                    <select
+                      className="form-select"
+                      required
+                      value={workoutParams.level}
+                      onChange={(e) => setWorkoutParams({ ...workoutParams, level: e.target.value })}
+                    >
+                      <option value="Beginner">Beginner</option>
+                      <option value="Intermediate">Intermediate</option>
+                      <option value="Advanced">Advanced</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Optional Navy Body Fat parameters */}
+                <div style={{ borderTop: "1px dashed var(--border-muted)", paddingTop: "10px", marginTop: "4px" }}>
+                  <h4 style={{ fontSize: "0.85rem", color: "var(--primary)", marginBottom: "8px" }}>📐 Body Fat Estimator (U.S. Navy Method - Optional)</h4>
+                  <div style={{ display: "grid", gridTemplateColumns: reportGender === "Female" ? "1fr 1fr 1fr" : "1fr 1fr", gap: "10px" }}>
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontSize: "0.75rem" }}>Waist (cm)</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        placeholder="Waist"
+                        value={reportWaist}
+                        onChange={(e) => setReportWaist(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" style={{ fontSize: "0.75rem" }}>Neck (cm)</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        placeholder="Neck"
+                        value={reportNeck}
+                        onChange={(e) => setReportNeck(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                      />
+                    </div>
+                    {reportGender === "Female" && (
+                      <div className="form-group">
+                        <label className="form-label" style={{ fontSize: "0.75rem" }}>Hip (cm)</label>
+                        <input
+                          type="number"
+                          className="form-input"
+                          placeholder="Hip"
+                          value={reportHip}
+                          onChange={(e) => setReportHip(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: "10px", marginTop: "8px" }}>
+                  <button
+                    type="submit"
+                    className="btn"
+                    disabled={generatingReport}
+                    style={{ flex: 1, padding: "10px", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
+                  >
+                    {generatingReport ? "🤖 Consulting Coach AI..." : "⚡ Generate Coaching Report"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => saveUserProfile(workoutParams)}
+                    style={{ padding: "10px" }}
+                    title="Save Biometrics to Profile"
+                  >
+                    💾 Save Data
+                  </button>
+                </div>
+
+              </form>
+            </div>
+
+            {/* Right Report Display */}
+            <div className="glass-panel" style={{ display: "flex", flexDirection: "column", height: "100%", maxHeight: "800px", overflow: "hidden" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border-muted)", paddingBottom: "12px", marginBottom: "12px" }}>
+                <h3 style={{ fontSize: "1.1rem" }}>📋 AI Coach Analysis</h3>
+                {reportOutput && (
+                  <button
+                    className="btn btn-secondary"
+                    style={{ padding: "4px 8px", fontSize: "0.75rem" }}
+                    onClick={() => {
+                      const printWindow = window.open("", "_blank");
+                      if (printWindow) {
+                        printWindow.document.write(`
+                          <html>
+                            <head>
+                              <title>FlexAI Coach Report</title>
+                              <style>
+                                body { font-family: system-ui, sans-serif; padding: 40px; color: #fff; background: #0b0c10; line-height: 1.6; }
+                                table { border-collapse: collapse; width: 100%; margin: 20px 0; border: 1px solid rgba(255,255,255,0.1); }
+                                th, td { border: 1px solid rgba(255,255,255,0.1); padding: 12px; text-align: left; }
+                                th { background: rgba(255,255,255,0.05); color: #00ffaa; }
+                                h1, h2 { color: #00ffaa; }
+                              </style>
+                            </head>
+                            <body>
+                              \${reportOutput.replace(/\\n/g, "<br>").replace(/## (.*)/g, "<h2>$1</h2>").replace(/# (.*)/g, "<h1>$1</h1>")}
+                              <script>window.print();</script>
+                            </body>
+                          </html>
+                        `);
+                        printWindow.document.close();
+                      }
+                    }}
+                  >
+                    🖨️ Print Report
+                  </button>
+                )}
+              </div>
+
+              <div style={{ flex: 1, overflowY: "auto", paddingRight: "4px" }}>
+                {generatingReport ? (
+                  <div style={{ padding: "40px 0", textAlign: "center" }}>
+                    <span style={{ fontSize: "3rem", display: "inline-block", animation: "spin 2s linear infinite" }}>⚙️</span>
+                    <h3 style={{ fontSize: "1.1rem", marginTop: "16px" }}>Compiling Client Metrics...</h3>
+                    <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", marginTop: "6px" }}>
+                      Calculating BMI, BMR, TDEE, Body Fat and consulting Coach Persona \${selectedTrainer}. Please wait.
+                    </p>
+                  </div>
+                ) : reportOutput ? (
+                  <div style={{ whiteSpace: "pre-wrap", fontFamily: "inherit", fontSize: "0.85rem", lineHeight: "1.6", color: "var(--text-main)" }}>
+                    {reportOutput}
+                  </div>
+                ) : (
+                  <div style={{ padding: "60px 0", textAlign: "center", color: "var(--text-muted)" }}>
+                    <span style={{ fontSize: "3rem" }}>📋</span>
+                    <h3 style={{ fontSize: "1.1rem", marginTop: "12px" }}>No Report Generated Yet</h3>
+                    <p style={{ fontSize: "0.8rem", maxWidth: "300px", margin: "6px auto 0" }}>
+                      Fill in your body parameters on the left and click "Generate" to generate a detailed personal coaching audit.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
