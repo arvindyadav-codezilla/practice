@@ -795,7 +795,7 @@ async def update_profile(req: ProfileUpdateRequest):
         return {"status": "error", "message": str(e)}
 
 # Helper: Twilio WhatsApp Dispatcher
-def send_twilio_whatsapp(to_number: str, body: str, admin_id: Optional[str] = None) -> dict:
+def send_twilio_whatsapp(to_number: str, body: str, admin_id: Optional[str] = None, media_url: Optional[str] = None) -> dict:
     account_sid = None
     auth_token = None
     from_number = None
@@ -820,7 +820,7 @@ def send_twilio_whatsapp(to_number: str, body: str, admin_id: Optional[str] = No
         from_number = os.getenv("TWILIO_SENDER_NUMBER", "whatsapp:+14155238886")
 
     if not account_sid or not auth_token or "your_twilio" in account_sid:
-        print(f"[Twilio Mock] Send to {to_number} (From: {from_number}): {body}")
+        print(f"[Twilio Mock] Send to {to_number} (From: {from_number}): {body} (Media: {media_url})")
         return {"status": "mocked", "message": "Twilio not configured. Message logged to console."}
         
     to_formatted = to_number
@@ -833,6 +833,8 @@ def send_twilio_whatsapp(to_number: str, body: str, admin_id: Optional[str] = No
         "To": to_formatted,
         "Body": body
     }
+    if media_url:
+        data["MediaUrl"] = media_url
     
     encoded_data = urllib.parse.urlencode(data).encode("utf-8")
     
@@ -876,22 +878,35 @@ async def send_whatsapp_brief(req: WhatsAppBriefRequest):
             return {"status": "error", "message": "WhatsApp number is not configured"}
             
         msg = f"⚡ *FlexAI Daily Athlete Briefing* ⚡\n\nHello {uname}!\nHere is your plan for today:\n\n"
+        first_img_url = None
         
         if req.workout:
             msg += "*🏋️ WORKOUT ROUTINE:*\n"
             for idx, ex in enumerate(req.workout):
-                msg += f"{idx+1}. {ex.get('name')} ({ex.get('duration')}s active) - _Tip: {ex.get('tip')}_\n"
+                ex_name = ex.get('name', 'Exercise')
+                clean_prompt = urllib.parse.quote_plus(f"ultra detailed realistic photo of {ex_name} gym exercise")
+                img_url = f"https://image.pollinations.ai/prompt/{clean_prompt}?width=600&height=400&nologo=true"
+                if not first_img_url:
+                    first_img_url = img_url
+                msg += f"{idx+1}. *{ex_name}* ({ex.get('duration')}s active)\n📸 Photo: {img_url}\n💡 _Tip: {ex.get('tip')}_\n\n"
             msg += "\n"
             
         if req.mealPlan:
             msg += "*🥗 DIET PLAN:*\n"
-            msg += f"🍳 Breakfast: {req.mealPlan.get('Breakfast', 'N/A')}\n"
-            msg += f"🥗 Lunch: {req.mealPlan.get('Lunch', 'N/A')}\n"
-            msg += f"🍎 Snack: {req.mealPlan.get('Snack', 'N/A')}\n"
-            msg += f"🥩 Dinner: {req.mealPlan.get('Dinner', 'N/A')}\n"
+            for meal_type, emoji in [("Breakfast", "🍳"), ("Lunch", "🥗"), ("Snack", "🍎"), ("Dinner", "🥩")]:
+                dish_name = req.mealPlan.get(meal_type, "N/A")
+                if dish_name and dish_name != "N/A":
+                    clean_dish = urllib.parse.quote_plus(f"healthy {meal_type.lower()} food dish {dish_name}")
+                    dish_img_url = f"https://image.pollinations.ai/prompt/{clean_dish}?width=600&height=400&nologo=true"
+                    if not first_img_url:
+                        first_img_url = dish_img_url
+                    msg += f"{emoji} *{meal_type}*: {dish_name}\n📸 Photo: {dish_img_url}\n"
+                else:
+                    msg += f"{emoji} *{meal_type}*: N/A\n"
+            
             if req.mealPlan.get('Macros'):
                 mac = req.mealPlan.get('Macros')
-                msg += f"_Macros: Carbs: {mac.get('Carbs')}, Protein: {mac.get('Protein')}, Fat: {mac.get('Fat')}_\n"
+                msg += f"\n_Macros: Carbs: {mac.get('Carbs')}, Protein: {mac.get('Protein')}, Fat: {mac.get('Fat')}_\n"
             if req.mealPlan.get('Micros'):
                 mic = req.mealPlan.get('Micros')
                 msg += f"_Micros: Fiber: {mic.get('Fiber', 'N/A')}, Vitamin: {mic.get('Vitamin', 'N/A')}_\n"
@@ -899,7 +914,7 @@ async def send_whatsapp_brief(req: WhatsAppBriefRequest):
         msg += "\nStay dedicated! 💪🔥"
         
         # Try Twilio first
-        twilio_res = send_twilio_whatsapp(phone, msg, admin_id=gym_owner_id)
+        twilio_res = send_twilio_whatsapp(phone, msg, admin_id=gym_owner_id, media_url=first_img_url)
         if twilio_res.get("status") == "success":
             return {"status": "success", "provider": "twilio", "response": twilio_res}
             
