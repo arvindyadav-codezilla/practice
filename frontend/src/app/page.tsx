@@ -539,6 +539,12 @@ export default function FlexAIPortal() {
     }
   };
 
+  // Helper for Pollinations.ai Free AI Image Generation
+  const getAIImageUrl = (prompt: string, width = 600, height = 400) => {
+    const cleanPrompt = encodeURIComponent(`ultra detailed realistic photo of ${prompt}, fitness gym environment, 4k resolution`);
+    return `https://image.pollinations.ai/prompt/${cleanPrompt}?width=${width}&height=${height}&nologo=true`;
+  };
+
   // Fetch Gym Analytics
   const fetchAdminAnalytics = async () => {
     if (!user) return;
@@ -2849,8 +2855,20 @@ export default function FlexAIPortal() {
               {workoutPlan ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                   {workoutPlan.map((ex, idx) => (
-                    <div key={idx} className="exercise-row">
+                    <div key={idx} className="exercise-row" style={{ display: "flex", gap: "12px", alignItems: "center" }}>
                       <div className="exercise-number">{idx + 1}</div>
+                      
+                      {/* AI Generated Exercise Visual Thumbnail */}
+                      <div style={{ width: "70px", height: "70px", borderRadius: "10px", overflow: "hidden", flexShrink: 0, border: "1px solid var(--border-muted)", background: "#18181b" }}>
+                        <img 
+                          src={getAIImageUrl(`${ex.name} gym workout exercise`, 150, 150)} 
+                          alt={ex.name}
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          loading="lazy"
+                          onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                        />
+                      </div>
+
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 700, fontSize: "0.95rem" }}>{ex.name}</div>
                         <div style={{ color: "var(--text-muted)", fontSize: "0.75rem", marginTop: "2px" }}>
@@ -2920,14 +2938,23 @@ export default function FlexAIPortal() {
               </div>
 
               {workoutPlan && workoutPlan[currentExerciseIndex] && (
-                <div style={{ textAlign: "center", maxWidth: "80%", margin: "0 auto" }}>
+                <div style={{ textAlign: "center", maxWidth: "85%", margin: "0 auto", display: "flex", flexDirection: "column", alignItems: "center" }}>
+                  {/* Active Exercise AI Demonstration Photo */}
+                  <div style={{ width: "100%", maxWidth: "280px", height: "140px", borderRadius: "12px", overflow: "hidden", marginBottom: "12px", border: "1px solid var(--border-muted)", background: "#18181b", boxShadow: "0 4px 20px rgba(0,0,0,0.5)" }}>
+                    <img 
+                      src={getAIImageUrl(`athlete performing ${workoutPlan[currentExerciseIndex].name} exercise`, 400, 250)} 
+                      alt={workoutPlan[currentExerciseIndex].name}
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  </div>
+
                   <h3 style={{ fontSize: "1.2rem", fontWeight: 700 }}>
                     {workoutPlan[currentExerciseIndex].name}
                   </h3>
-                  <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", marginTop: "6px" }}>
+                  <p style={{ color: "var(--text-muted)", fontSize: "0.8rem", marginTop: "4px" }}>
                     {workoutPlan[currentExerciseIndex].description}
                   </p>
-                  <div style={{ background: "rgba(255,255,255,0.02)", padding: "8px 12px", borderRadius: "8px", marginTop: "10px", border: "1px solid var(--border-muted)", fontSize: "0.75rem", fontStyle: "italic", color: "var(--primary)" }}>
+                  <div style={{ background: "rgba(255,255,255,0.02)", padding: "8px 12px", borderRadius: "8px", marginTop: "8px", border: "1px solid var(--border-muted)", fontSize: "0.75rem", fontStyle: "italic", color: "var(--primary)" }}>
                     💡 Tip: {workoutPlan[currentExerciseIndex].tip}
                   </div>
                 </div>
@@ -3122,26 +3149,42 @@ export default function FlexAIPortal() {
                     </div>
                   )}
 
-                  {/* Meals display */}
-                  <div className="meal-card" style={{ borderLeftColor: "var(--primary)" }}>
-                    <div className="meal-time" style={{ color: "var(--primary)" }}>Breakfast</div>
-                    <div className="meal-name">{mealPlan.Breakfast}</div>
-                  </div>
+                  {/* Meals display with AI generated food dish photos */}
+                  {[
+                    { title: "Breakfast", dish: mealPlan.Breakfast, color: "var(--primary)" },
+                    { title: "Lunch", dish: mealPlan.Lunch, color: "var(--accent-orange)" },
+                    { title: "Snack", dish: mealPlan.Snack, color: "var(--accent-pink)" },
+                    { title: "Dinner", dish: mealPlan.Dinner, color: "var(--accent-violet)" }
+                  ].map((meal) => (
+                    <div 
+                      key={meal.title} 
+                      className="meal-card" 
+                      style={{ 
+                        borderLeftColor: meal.color, 
+                        display: "flex", 
+                        alignItems: "center", 
+                        gap: "14px", 
+                        padding: "10px 14px",
+                        overflow: "hidden"
+                      }}
+                    >
+                      {/* AI Generated Meal Dish Photo */}
+                      <div style={{ width: "65px", height: "65px", borderRadius: "10px", overflow: "hidden", flexShrink: 0, border: "1px solid var(--border-muted)", background: "#18181b" }}>
+                        <img 
+                          src={getAIImageUrl(`healthy ${meal.title.toLowerCase()} food dish ${meal.dish}`, 150, 150)} 
+                          alt={meal.dish}
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          loading="lazy"
+                          onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                        />
+                      </div>
 
-                  <div className="meal-card" style={{ borderLeftColor: "var(--accent-orange)" }}>
-                    <div className="meal-time" style={{ color: "var(--accent-orange)" }}>Lunch</div>
-                    <div className="meal-name">{mealPlan.Lunch}</div>
-                  </div>
-
-                  <div className="meal-card" style={{ borderLeftColor: "var(--accent-pink)" }}>
-                    <div className="meal-time" style={{ color: "var(--accent-pink)" }}>Snack</div>
-                    <div className="meal-name">{mealPlan.Snack}</div>
-                  </div>
-
-                  <div className="meal-card" style={{ borderLeftColor: "var(--accent-violet)" }}>
-                    <div className="meal-time" style={{ color: "var(--accent-violet)" }}>Dinner</div>
-                    <div className="meal-name">{mealPlan.Dinner}</div>
-                  </div>
+                      <div style={{ flex: 1 }}>
+                        <div className="meal-time" style={{ color: meal.color }}>{meal.title}</div>
+                        <div className="meal-name" style={{ fontSize: "0.9rem", fontWeight: 700 }}>{meal.dish}</div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
