@@ -87,6 +87,11 @@ class ProfileUpdateRequest(BaseModel):
     bmi: Optional[float] = None
     medicalConditions: Optional[str] = None
     isActive: Optional[bool] = None
+    gender: Optional[str] = None
+    activityLevel: Optional[str] = None
+    waist: Optional[float] = None
+    neck: Optional[float] = None
+    hip: Optional[float] = None
 
 class WhatsAppBriefRequest(BaseModel):
     userId: str
@@ -103,6 +108,18 @@ class UpdateAttendanceRequest(BaseModel):
     memberId: str
     status: str  # 'present' or 'absent'
     date: Optional[str] = None
+class CoachReportRequest(BaseModel):
+    gender: str
+    age: int
+    height: float
+    weight: float
+    activityLevel: str
+    goal: str
+    experience: str
+    waist: Optional[float] = None
+    neck: Optional[float] = None
+    hip: Optional[float] = None
+
 
 class SendCustomMessageRequest(BaseModel):
     memberId: str
@@ -373,6 +390,293 @@ async def generate_meal_plan(req: MealPlanRequest):
     # Fallback to local
     fallback_diet = req.dietType if req.dietType in OFFLINE_MEALS else "Balanced"
     return {"source": "Offline Database", "mealPlan": OFFLINE_MEALS[fallback_diet]}
+@app.post("/api/generate-coach-report")
+async def generate_coach_report(req: CoachReportRequest):
+    # Perform math calculations first to inject absolute correct values
+    import math
+    
+    # BMI
+    bmi_val = req.weight / ((req.height / 100) ** 2)
+    if bmi_val < 18.5:
+        bmi_cat = "Underweight"
+        bmi_meaning = "Your body weight is lower than healthy for your height. Focus on progressive muscle gain."
+    elif 18.5 <= bmi_val < 25:
+        bmi_cat = "Normal"
+        bmi_meaning = "You have a healthy body weight for your height."
+    elif 25 <= bmi_val < 30:
+        bmi_cat = "Overweight"
+        bmi_meaning = "You are carrying extra weight. Consider clean cutting or recomposition."
+    else:
+        bmi_cat = "Obese"
+        bmi_meaning = "You are carrying significant extra weight. Focus on fat loss."
+
+    # BMR (Mifflin-St Jeor)
+    if req.gender.lower() == "male":
+        bmr_val = (10 * req.weight) + (6.25 * req.height) - (5 * req.age) + 5
+    else:
+        bmr_val = (10 * req.weight) + (6.25 * req.height) - (5 * req.age) - 161
+
+    # TDEE
+    multipliers = {
+        "sedentary": 1.2,
+        "light": 1.375,
+        "moderate": 1.55,
+        "heavy": 1.725,
+        "athlete": 1.9
+    }
+    mult = multipliers.get(req.activityLevel.lower(), 1.2)
+    tdee_val = bmr_val * mult
+
+    # Daily Calories
+    if req.goal.lower() == "build muscle":
+        target_calories = tdee_val + 350
+        calorie_notes = "Calorie Surplus: Needed to provide building blocks for synthesis of new muscle tissue."
+    elif req.goal.lower() == "lose fat":
+        target_calories = tdee_val - 450
+        calorie_notes = "Calorie Deficit: Forces the body to mobilize stored fat to meet its energy demands."
+    elif req.goal.lower() == "body recomposition":
+        target_calories = tdee_val
+        calorie_notes = "Maintenance: High protein targets allow simultaneous fat burning and muscle building."
+    else:
+        target_calories = tdee_val
+        calorie_notes = "Maintenance: Equal energy input and output to stay at your current body composition."
+
+    # Body Fat % (US Navy formula)
+    body_fat = None
+    body_fat_cat = ""
+    lbm = None
+    ffmi = None
+    ffmi_cat = ""
+
+    if req.waist and req.neck:
+        try:
+            if req.gender.lower() == "male":
+                body_fat = 495 / (1.0324 - 0.19077 * math.log10(req.waist - req.neck) + 0.15456 * math.log10(req.height)) - 450
+            else:
+                if req.hip:
+                    body_fat = 495 / (1.29579 - 0.35004 * math.log10(req.waist + req.hip - req.neck) + 0.22100 * math.log10(req.height)) - 450
+            
+            if body_fat is not None:
+                if req.gender.lower() == "male":
+                    if body_fat < 6: body_fat_cat = "Essential Fat"
+                    elif body_fat < 14: body_fat_cat = "Athletic"
+                    elif body_fat < 18: body_fat_cat = "Fit"
+                    elif body_fat < 25: body_fat_cat = "Average"
+                    else: body_fat_cat = "Obese"
+                else:
+                    if body_fat < 14: body_fat_cat = "Essential Fat"
+                    elif body_fat < 21: body_fat_cat = "Athletic"
+                    elif body_fat < 25: body_fat_cat = "Fit"
+                    elif body_fat < 32: body_fat_cat = "Average"
+                    else: body_fat_cat = "Obese"
+                
+                # Lean Body Mass (LBM)
+                lbm = req.weight * (1 - (body_fat / 100))
+                
+                # FFMI
+                ffmi = lbm / ((req.height / 100) ** 2)
+                if ffmi < 18: ffmi_cat = "Low"
+                elif ffmi < 20: ffmi_cat = "Average"
+                elif ffmi < 22: ffmi_cat = "Fit"
+                elif ffmi < 25: ffmi_cat = "Muscular"
+                else: ffmi_cat = "Exceptional"
+        except Exception:
+            body_fat = None
+
+    # Macronutrients
+    if req.goal.lower() == "lose fat":
+        protein_g_per_kg = 2.0
+    else:
+        protein_g_per_kg = 1.9
+    protein_g = req.weight * protein_g_per_kg
+    protein_kcal = protein_g * 4
+    
+    fat_kcal = target_calories * 0.25
+    fat_g = fat_kcal / 9
+    
+    carb_kcal = target_calories - protein_kcal - fat_kcal
+    carb_g = carb_kcal / 4
+
+    # Water intake
+    water_liters = (req.weight * 40) / 1000  # 40ml per kg
+
+    # Healthy weight range
+    healthy_weight_min = 18.5 * ((req.height / 100) ** 2)
+    healthy_weight_max = 24.9 * ((req.height / 100) ** 2)
+
+    # Goal timeline
+    if req.goal.lower() == "lose fat":
+        timeline = "For safe fat loss of 0.5kg/week, expect to spend 8-12 weeks to see significant definition changes."
+    elif req.goal.lower() == "build muscle":
+        timeline = "Naturally gaining muscle is slow: target 0.5-1kg of muscle tissue per month, requiring a dedicated 6-12 months block."
+    elif req.goal.lower() == "body recomposition":
+        timeline = "Body recomposition is a slow transition. Expect 12-20 weeks to build lean muscle while dropping fat layers."
+    else:
+        timeline = "Maintenance timeline: ongoing lifestyle consistency."
+
+    # Body Fat String representation
+    bf_str = f"{body_fat:.1f}% ({body_fat_cat})" if body_fat is not None else "Body Fat % cannot be estimated accurately without body measurements (waist, neck, hip)."
+    lbm_str = f"{lbm:.1f} kg" if lbm is not None else "Cannot be calculated without Body Fat %"
+    ffmi_str = f"{ffmi:.1f} ({ffmi_cat})" if ffmi is not None else "Cannot be calculated without Body Fat %"
+
+    prompt = f"""
+    You are an expert AI Fitness Coach, Certified Nutritionist, and Bodybuilding Trainer.
+    You need to write a personalized, highly professional, encouraging fitness report for a client.
+    
+    Here is the client's information:
+    - Gender: {req.gender}
+    - Age: {req.age}
+    - Height: {req.height} cm
+    - Weight: {req.weight} kg
+    - Activity Level: {req.activityLevel}
+    - Goal: {req.goal}
+    - Workout Experience: {req.experience}
+    
+    Here are their EXACT calculated body metrics (calculated via standard medical formulas):
+    - BMI: {bmi_val:.1f} ({bmi_cat}) - {bmi_meaning}
+    - BMR: {bmr_val:.0f} kcal
+    - TDEE: {tdee_val:.0f} kcal
+    - Body Fat %: {bf_str}
+    - Lean Body Mass: {lbm_str}
+    - FFMI: {ffmi_str}
+    
+    Here are their calculated nutrition targets:
+    - Calories: {target_calories:.0f} kcal ({calorie_notes})
+    - Protein: {protein_g:.0f} g
+    - Carbs: {carb_g:.0f} g
+    - Fats: {fat_g:.0f} g
+    - Water Intake: {water_liters:.1f} liters/day
+    - Healthy Weight Range: {healthy_weight_min:.1f} kg - {healthy_weight_max:.1f} kg
+    - Realistic Goal Timeline: {timeline}
+    
+    Now, generate the report. It MUST be returned in raw markdown following this structure EXACTLY:
+    
+    # Fitness Report
+    
+    ## Body Metrics
+    - **BMI**: {bmi_val:.1f} ({bmi_cat})
+    - **BMR**: {bmr_val:.0f} kcal
+    - **TDEE**: {tdee_val:.0f} kcal
+    - **Body Fat %**: {bf_str}
+    - **Lean Body Mass**: {lbm_str}
+    - **FFMI**: {ffmi_str}
+    
+    ## Nutrition
+    - **Calories**: {target_calories:.0f} kcal
+    - **Protein**: {protein_g:.0f} g
+    - **Carbs**: {carb_g:.0f} g
+    - **Fats**: {fat_g:.0f} g
+    - **Water Intake**: {water_liters:.1f} liters/day
+    
+    ## Health Assessment
+    [Provide an overall health assessment based on their current BMI, experience level, goal, and metrics. Add brief paragraphs discussing their potential strengths and weaknesses.]
+    
+    ## Fitness Terms Explained
+    [Explain each of the following terms in a simple, beginner-friendly way using 2-3 sentences per term. Output them as a definition list or key-value format:
+    - BMI
+    - BMR
+    - TDEE
+    - Calories
+    - Protein
+    - Carbohydrates
+    - Fats
+    - Macros
+    - Micros
+    - Body Fat %
+    - Lean Body Mass
+    - FFMI
+    - Calorie Deficit
+    - Calorie Surplus
+    - Progressive Overload
+    - Hypertrophy
+    - Strength Training
+    - Endurance
+    - RPE
+    - RIR
+    - DOMS
+    - HIIT
+    - LISS
+    - VO₂ Max
+    - Reps
+    - Sets
+    - 1RM
+    - ROM
+    - Time Under Tension (TUT)
+    - Bulking
+    - Cutting
+    - Recomposition
+    - Maintenance
+    - Whey Protein
+    - Creatine
+    - BCAA
+    - EAA
+    - Fish Oil]
+    
+    ## Personalized Recommendations
+    [Provide highly custom advice for:
+    - Daily Calories rationale
+    - Protein Target reasoning
+    - Water Intake tips
+    - Weekly Workout Recommendation (specific to their experience level)
+    - Cardio Recommendation (specific to their goal)
+    - Recovery Tips
+    - Sleep Recommendation
+    - Nutrition Tips]
+    
+    ## Weekly Action Plan
+    [Render a clean, beautiful Markdown table summarizing their week:
+    - Column headers: Day, Calories, Protein, Workout Focus, Cardio, Water (liters), Rest Status
+    - Fill out 7 rows for Monday to Sunday, detailing workout recommendations and rest days.]
+    
+    Remember: Keep the tone highly motivational, professional, and clear. Do not wrap the response in any markdown code block wrappers (like ```markdown ... ```). Simply output the raw text starting with # Fitness Report.
+    """
+    
+    ai_response = await fetch_gemini_api(prompt)
+    if not ai_response:
+        ai_response = f"""# Fitness Report
+
+## Body Metrics
+- **BMI**: {bmi_val:.1f} ({bmi_cat})
+- **BMR**: {bmr_val:.0f} kcal
+- **TDEE**: {tdee_val:.0f} kcal
+- **Body Fat %**: {bf_str}
+- **Lean Body Mass**: {lbm_str}
+- **FFMI**: {ffmi_str}
+
+## Nutrition
+- **Calories**: {target_calories:.0f} kcal
+- **Protein**: {protein_g:.0f} g
+- **Carbs**: {carb_g:.0f} g
+- **Fats**: {fat_g:.0f} g
+- **Water Intake**: {water_liters:.1f} liters/day
+
+## Health Assessment
+Your BMI is {bmi_val:.1f}, placing you in the {bmi_cat} category.
+Primary strengths: commitment to {req.goal}.
+Weaknesses: adjusting to new training volume.
+
+## Fitness Terms Explained
+- **BMI**: Body Mass Index measures weight relative to height.
+- **BMR**: Basal Metabolic Rate is calories burned at rest.
+- **TDEE**: Total Daily Energy Expenditure is total daily burn.
+
+## Personalized Recommendations
+- Target daily calories: {target_calories:.0f} kcal.
+- Maintain high protein intake at {protein_g:.0f}g.
+
+## Weekly Action Plan
+| Day | Calories | Protein | Workout Focus | Cardio | Water | Rest Status |
+|---|---|---|---|---|---|---|
+| Mon | {target_calories:.0f} | {protein_g:.0f}g | Full Body Focus | None | {water_liters:.1f}L | Active |
+| Tue | {target_calories:.0f} | {protein_g:.0f}g | Rest Day | Walking | {water_liters:.1f}L | Rest |
+| Wed | {target_calories:.0f} | {protein_g:.0f}g | Upper Body | None | {water_liters:.1f}L | Active |
+| Thu | {target_calories:.0f} | {protein_g:.0f}g | Rest Day | Walking | {water_liters:.1f}L | Rest |
+| Fri | {target_calories:.0f} | {protein_g:.0f}g | Lower Body | None | {water_liters:.1f}L | Active |
+| Sat | {target_calories:.0f} | {protein_g:.0f}g | Active Rest | HIIT (15m) | {water_liters:.1f}L | Rest |
+| Sun | {target_calories:.0f} | {protein_g:.0f}g | Full Rest | None | {water_liters:.1f}L | Rest |
+"""
+    return {"status": "success", "report": ai_response}
+
 
 # HTTP POST Endpoint: Save Workout Log
 @app.post("/api/save-workout-log")
@@ -475,7 +779,12 @@ async def update_profile(req: ProfileUpdateRequest):
             "height": req.height,
             "weight": req.weight,
             "bmi": req.bmi,
-            "medical_conditions": req.medicalConditions
+            "medical_conditions": req.medicalConditions,
+            "gender": req.gender,
+            "activity_level": req.activityLevel,
+            "waist": req.waist,
+            "neck": req.neck,
+            "hip": req.hip
         }
         if req.isActive is not None:
             profile_data["is_active"] = req.isActive
