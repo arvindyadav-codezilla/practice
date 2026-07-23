@@ -201,7 +201,7 @@ export default function FlexAIPortal() {
   // Fetch Stats from Backend (which pulls from Supabase)
   const fetchUserStats = async (userId: string) => {
     try {
-      const res = await fetch(getApiUrl(`/api/user-stats/${userId}`));
+      const res = await fetch(getApiUrl(`/api/user-stats/${userId}?t=${Date.now()}`), { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         setTotalWorkouts(data.totalWorkouts || 0);
@@ -216,7 +216,7 @@ export default function FlexAIPortal() {
   // Fetch User Profile Settings from Backend
   const fetchUserProfile = async (userId: string, currentUser?: any) => {
     try {
-      const res = await fetch(getApiUrl(`/api/profile/${userId}`));
+      const res = await fetch(getApiUrl(`/api/profile/${userId}?t=${Date.now()}`), { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (data.status === "success" && data.profile) {
@@ -358,7 +358,7 @@ export default function FlexAIPortal() {
   // Fetch Plan assigned by Gym Owner
   const fetchAssignedPlan = async (userId: string) => {
     try {
-      const res = await fetch(getApiUrl(`/api/member/assigned-plan/${userId}`));
+      const res = await fetch(getApiUrl(`/api/member/assigned-plan/${userId}?t=${Date.now()}`), { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (data.status === "success" && data.plan) {
@@ -380,7 +380,7 @@ export default function FlexAIPortal() {
   const fetchAdminMembers = async () => {
     if (!user) return;
     try {
-      const res = await fetch(getApiUrl(`/api/admin/members/${user.id}`));
+      const res = await fetch(getApiUrl(`/api/admin/members/${user.id}?t=${Date.now()}`), { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (data.status === "success") {
@@ -396,7 +396,7 @@ export default function FlexAIPortal() {
   const fetchAdminAttendance = async () => {
     if (!user) return;
     try {
-      const res = await fetch(getApiUrl(`/api/admin/attendance/${user.id}`));
+      const res = await fetch(getApiUrl(`/api/admin/attendance/${user.id}?t=${Date.now()}`), { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (data.status === "success") {
@@ -412,7 +412,7 @@ export default function FlexAIPortal() {
   const fetchAdminLeads = async () => {
     if (!user) return;
     try {
-      const res = await fetch(getApiUrl(`/api/admin/leads/${user.id}`));
+      const res = await fetch(getApiUrl(`/api/admin/leads/${user.id}?t=${Date.now()}`), { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (data.status === "success") {
@@ -479,7 +479,7 @@ export default function FlexAIPortal() {
   // Fetch Super Admin lists
   const fetchSuperAdminData = async () => {
     try {
-      const res = await fetch(getApiUrl("/api/superadmin/gyms"));
+      const res = await fetch(getApiUrl(`/api/superadmin/gyms?t=${Date.now()}`), { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (data.status === "success") {
@@ -515,7 +515,7 @@ export default function FlexAIPortal() {
   const fetchAdminAnalytics = async () => {
     if (!user) return;
     try {
-      const res = await fetch(getApiUrl(`/api/admin/analytics/${user.id}`));
+      const res = await fetch(getApiUrl(`/api/admin/analytics/${user.id}?t=${Date.now()}`), { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (data.status === "success") {
@@ -647,7 +647,7 @@ export default function FlexAIPortal() {
     setSelectedMemberForPlan(member);
     setBuilderDay(day);
     try {
-      const res = await fetch(getApiUrl(`/api/member/assigned-plan/${member.id}`));
+      const res = await fetch(getApiUrl(`/api/member/assigned-plan/${member.id}?t=${Date.now()}`), { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         if (data.status === "success" && data.plan) {
@@ -721,7 +721,7 @@ export default function FlexAIPortal() {
       return;
     }
     try {
-      const planRes = await fetch(getApiUrl(`/api/member/assigned-plan/${member.id}`));
+      const planRes = await fetch(getApiUrl(`/api/member/assigned-plan/${member.id}?t=${Date.now()}`), { cache: "no-store" });
       let workout = undefined;
       let mealPlan = undefined;
       if (planRes.ok) {
