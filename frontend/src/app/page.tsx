@@ -180,7 +180,7 @@ export default function FlexAIPortal() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user);
-        fetchUserProfile(session.user.id);
+        fetchUserProfile(session.user.id, session.user);
         fetchUserStats(session.user.id);
       }
     });
@@ -188,7 +188,7 @@ export default function FlexAIPortal() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         setUser(session.user);
-        fetchUserProfile(session.user.id);
+        fetchUserProfile(session.user.id, session.user);
         fetchUserStats(session.user.id);
       } else {
         setUser(null);
@@ -214,7 +214,7 @@ export default function FlexAIPortal() {
   };
 
   // Fetch User Profile Settings from Backend
-  const fetchUserProfile = async (userId: string) => {
+  const fetchUserProfile = async (userId: string, currentUser?: any) => {
     try {
       const res = await fetch(getApiUrl(`/api/profile/${userId}`));
       if (res.ok) {
@@ -246,8 +246,9 @@ export default function FlexAIPortal() {
           }
         } else {
           // Profile not found in database: Auto-heal/create matching user metadata
-          const authRole = user?.user_metadata?.role || "member";
-          const signupName = user?.user_metadata?.display_name || user?.email?.split("@")[0] || "Athlete";
+          const activeUser = currentUser || user;
+          const authRole = activeUser?.user_metadata?.role || "member";
+          const signupName = activeUser?.user_metadata?.display_name || activeUser?.email?.split("@")[0] || "Athlete";
           console.log("No profile record found in public.profiles. Auto-creating with role:", authRole);
           try {
             await fetch(getApiUrl("/api/profile/update"), {
@@ -267,7 +268,7 @@ export default function FlexAIPortal() {
             });
             setRole(authRole);
             // Re-fetch now that profile is saved in DB
-            setTimeout(() => fetchUserProfile(userId), 200);
+            setTimeout(() => fetchUserProfile(userId, activeUser), 200);
           } catch (createErr) {
             console.error("Auto-creation of profile failed:", createErr);
           }
@@ -814,7 +815,7 @@ export default function FlexAIPortal() {
       if (error) throw error;
       if (data.user) {
         setUser(data.user);
-        fetchUserProfile(data.user.id);
+        fetchUserProfile(data.user.id, data.user);
         fetchUserStats(data.user.id);
       }
     } catch (err: any) {
