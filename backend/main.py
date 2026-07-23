@@ -859,6 +859,24 @@ def send_twilio_whatsapp(to_number: str, body: str, admin_id: Optional[str] = No
         print(f"[Twilio] WhatsApp dispatch failed to {to_number}: {e}")
         return {"status": "error", "message": str(e)}
 
+def get_fitness_image_url(prompt: str) -> str:
+    p = prompt.lower()
+    if any(k in p for k in ["breakfast", "egg", "oats", "pancake"]):
+        return "https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?w=600&auto=format&fit=crop&q=80"
+    if any(k in p for k in ["lunch", "salad", "chicken", "rice"]):
+        return "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&auto=format&fit=crop&q=80"
+    if any(k in p for k in ["snack", "fruit", "nuts", "shake", "protein"]):
+        return "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80"
+    if any(k in p for k in ["dinner", "steak", "salmon", "paneer", "meal"]):
+        return "https://images.unsplash.com/photo-1544025162-d76694265947?w=600&auto=format&fit=crop&q=80"
+    if any(k in p for k in ["bench", "chest", "press"]):
+        return "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=600&auto=format&fit=crop&q=80"
+    if any(k in p for k in ["squat", "leg", "deadlift"]):
+        return "https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=600&auto=format&fit=crop&q=80"
+    if any(k in p for k in ["arm", "bicep", "dumbbell", "curl"]):
+        return "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=600&auto=format&fit=crop&q=80"
+    return "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=600&auto=format&fit=crop&q=80"
+
 # HTTP POST Endpoint: Send WhatsApp Brief
 @app.post("/api/send-whatsapp-brief")
 async def send_whatsapp_brief(req: WhatsAppBriefRequest):
@@ -884,8 +902,7 @@ async def send_whatsapp_brief(req: WhatsAppBriefRequest):
             msg += "*🏋️ WORKOUT ROUTINE:*\n"
             for idx, ex in enumerate(req.workout):
                 ex_name = ex.get('name', 'Exercise')
-                clean_prompt = urllib.parse.quote_plus(f"ultra detailed realistic photo of {ex_name} gym exercise")
-                img_url = f"https://image.pollinations.ai/prompt/{clean_prompt}?width=600&height=400&nologo=true"
+                img_url = get_fitness_image_url(ex_name)
                 if not first_img_url:
                     first_img_url = img_url
                 msg += f"{idx+1}. *{ex_name}* ({ex.get('duration')}s active)\n📸 Photo: {img_url}\n💡 _Tip: {ex.get('tip')}_\n\n"
@@ -896,8 +913,7 @@ async def send_whatsapp_brief(req: WhatsAppBriefRequest):
             for meal_type, emoji in [("Breakfast", "🍳"), ("Lunch", "🥗"), ("Snack", "🍎"), ("Dinner", "🥩")]:
                 dish_name = req.mealPlan.get(meal_type, "N/A")
                 if dish_name and dish_name != "N/A":
-                    clean_dish = urllib.parse.quote_plus(f"healthy {meal_type.lower()} food dish {dish_name}")
-                    dish_img_url = f"https://image.pollinations.ai/prompt/{clean_dish}?width=600&height=400&nologo=true"
+                    dish_img_url = get_fitness_image_url(f"{meal_type} {dish_name}")
                     if not first_img_url:
                         first_img_url = dish_img_url
                     msg += f"{emoji} *{meal_type}*: {dish_name}\n📸 Photo: {dish_img_url}\n"

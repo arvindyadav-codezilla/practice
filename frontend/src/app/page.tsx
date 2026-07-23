@@ -539,10 +539,31 @@ export default function FlexAIPortal() {
     }
   };
 
-  // Helper for Pollinations.ai Free AI Image Generation
+  // High-Speed Reliable Image Helper (Unsplash CDN)
   const getAIImageUrl = (prompt: string, width = 600, height = 400) => {
-    const cleanPrompt = encodeURIComponent(`ultra detailed realistic photo of ${prompt}, fitness gym environment, 4k resolution`);
-    return `https://image.pollinations.ai/prompt/${cleanPrompt}?width=${width}&height=${height}&nologo=true`;
+    const p = prompt.toLowerCase();
+    if (p.includes("breakfast") || p.includes("egg") || p.includes("oats") || p.includes("pancake")) {
+      return "https://images.unsplash.com/photo-1533089860892-a7c6f0a88666?w=600&auto=format&fit=crop&q=80";
+    }
+    if (p.includes("lunch") || p.includes("salad") || p.includes("chicken") || p.includes("rice")) {
+      return "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&auto=format&fit=crop&q=80";
+    }
+    if (p.includes("snack") || p.includes("fruit") || p.includes("nuts") || p.includes("shake") || p.includes("protein")) {
+      return "https://images.unsplash.com/photo-1601050690597-df0568f70950?w=600&auto=format&fit=crop&q=80";
+    }
+    if (p.includes("dinner") || p.includes("steak") || p.includes("salmon") || p.includes("paneer") || p.includes("meal")) {
+      return "https://images.unsplash.com/photo-1544025162-d76694265947?w=600&auto=format&fit=crop&q=80";
+    }
+    if (p.includes("bench") || p.includes("chest") || p.includes("press")) {
+      return "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=600&auto=format&fit=crop&q=80";
+    }
+    if (p.includes("squat") || p.includes("leg") || p.includes("deadlift")) {
+      return "https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?w=600&auto=format&fit=crop&q=80";
+    }
+    if (p.includes("arm") || p.includes("bicep") || p.includes("dumbbell") || p.includes("curl")) {
+      return "https://images.unsplash.com/photo-1583454110551-21f2fa2afe61?w=600&auto=format&fit=crop&q=80";
+    }
+    return "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=600&auto=format&fit=crop&q=80";
   };
 
   // Fetch Gym Analytics
