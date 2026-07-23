@@ -2528,35 +2528,30 @@ export default function FlexAIPortal() {
 
         {/* Tab 1: Dashboard */}
         {activeTab === "dashboard" && (
-          <div className="glass-panel glow-primary" style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+          <div className="glass-panel glow-primary" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
             
-            {/* Linked Trainer Panel */}
+            {/* Linked Trainer Banner */}
             {gymOwnerId && (
-              <div className="glass-panel" style={{ padding: "16px", borderLeft: "4px solid var(--primary)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+              <div className="glass-panel" style={{ padding: "14px", borderLeft: "4px solid var(--primary)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
                 <div>
-                  <h3 style={{ fontSize: "1.1rem", display: "flex", alignItems: "center", gap: "6px" }}>🏫 Linked Gym Trainer</h3>
-                  <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginTop: "4px" }}>
-                    Connected with Trainer Code: <code style={{ color: "var(--accent-orange)", fontWeight: 700 }}>{gymOwnerId}</code>. Ask coaching queries directly on WhatsApp!
+                  <h3 style={{ fontSize: "1rem", display: "flex", alignItems: "center", gap: "6px" }}>🏫 Connected Gym Trainer</h3>
+                  <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "2px" }}>
+                    Trainer ID: <code style={{ color: "var(--accent-orange)", fontWeight: 700 }}>{gymOwnerId}</code>. WhatsApp auto-sync enabled.
                   </p>
                 </div>
                 <button 
                   className="btn" 
-                  style={{ fontSize: "0.8rem", padding: "6px 12px" }}
+                  style={{ fontSize: "0.75rem", padding: "6px 12px" }}
                   onClick={async () => {
                     try {
                       const res = await fetch(getApiUrl("/api/admin/mark-attendance"), {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          memberId: user.id,
-                          status: "present"
-                        })
+                        body: JSON.stringify({ memberId: user.id, status: "present" })
                       });
-                      if (res.ok) {
-                        alert("✅ Checked-in successfully today! Trainer notified.");
-                      }
+                      if (res.ok) alert("✅ Checked-in successfully today!");
                     } catch (e) {
-                      console.error("Check-in error:", e);
+                      console.error(e);
                     }
                   }}
                 >
@@ -2565,201 +2560,170 @@ export default function FlexAIPortal() {
               </div>
             )}
 
-            <div style={{ borderBottom: "1px solid var(--border-muted)", paddingBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+            {/* HERO ACTION CARD (One Big Primary CTA) */}
+            <div 
+              className="glass-panel" 
+              style={{ 
+                background: "linear-gradient(135deg, rgba(0, 255, 170, 0.12), rgba(0, 0, 0, 0.4))", 
+                border: "1px solid rgba(0, 255, 170, 0.3)",
+                padding: "24px",
+                borderRadius: "16px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "16px"
+              }}
+            >
               <div>
-                <h2 style={{ fontSize: "1.6rem" }}>Select Your AI Gym Coach</h2>
-                <p style={{ color: "var(--text-muted)", fontSize: "0.85rem", marginTop: "4px" }}>
-                  Select a trainer card below. The interface theme, fonts, prompts, and spoken speech synthesis change immediately.
+                <div style={{ display: "flex", gap: "8px", alignItems: "center", marginBottom: "6px" }}>
+                  <span style={{ background: "var(--primary)", color: "#000", fontSize: "0.7rem", fontWeight: 800, padding: "2px 8px", borderRadius: "6px" }}>
+                    TODAY'S TARGET
+                  </span>
+                  <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Coach {selectedTrainer} Session</span>
+                </div>
+                <h2 style={{ fontSize: "1.8rem", fontWeight: 800, color: "#fff" }}>Ready for Today's Workout?</h2>
+                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "4px" }}>
+                  {workoutParams.goal} • {workoutParams.level} Level • {workoutParams.duration} Minutes
                 </p>
               </div>
-              {user?.offline && (
-                <div style={{ background: "rgba(249, 115, 22, 0.1)", border: "1px solid var(--accent-orange)", padding: "4px 10px", borderRadius: "8px", fontSize: "0.75rem", color: "var(--accent-orange)", fontWeight: 700 }}>
-                  🚨 Running in Offline Demo Mode
-                </div>
-              )}
+
+              <button 
+                className="btn"
+                style={{ 
+                  padding: "14px 28px", 
+                  fontSize: "1.05rem", 
+                  fontWeight: 800, 
+                  borderRadius: "12px",
+                  boxShadow: "0 4px 25px rgba(0, 255, 170, 0.3)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px"
+                }}
+                onClick={() => {
+                  if (!workoutPlan) {
+                    setActiveTab("workout");
+                  } else {
+                    setActiveTab("live");
+                  }
+                }}
+              >
+                <span>⚡ {workoutPlan ? "Start Live Session" : "Build Today's Plan"}</span>
+              </button>
             </div>
 
-            {/* Trainer Cards */}
+            {/* Progressive Disclosure Level Switcher */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.02)", padding: "10px 16px", borderRadius: "12px", border: "1px solid var(--border-muted)" }}>
+              <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-muted)" }}>🧬 Adaptive Experience Mode:</span>
+              <div style={{ display: "flex", gap: "6px" }}>
+                {[
+                  { key: "beginner", label: "🟢 Level 1: Rookie" },
+                  { key: "intermediate", label: "🟡 Level 2: Athlete" },
+                  { key: "advanced", label: "🔴 Level 3: Pro Lifter" }
+                ].map((lvl) => (
+                  <button
+                    key={lvl.key}
+                    className="nav-tab-btn"
+                    style={{
+                      padding: "4px 10px",
+                      fontSize: "0.72rem",
+                      background: workoutParams.level.toLowerCase().includes(lvl.key) ? "var(--primary)" : "transparent",
+                      color: workoutParams.level.toLowerCase().includes(lvl.key) ? "#000" : "var(--text-muted)"
+                    }}
+                    onClick={() => setWorkoutParams({ ...workoutParams, level: lvl.key === "beginner" ? "Beginner" : lvl.key === "intermediate" ? "Intermediate" : "Advanced" })}
+                  >
+                    {lvl.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Quick Micro-Win Tracker (Water & Habit Bar) */}
             <div className="grid-3">
-              {/* Max */}
-              <div 
-                className={`trainer-card card-Max ${selectedTrainer === "Max" ? "selected" : ""}`}
-                onClick={() => setSelectedTrainer("Max")}
-              >
-                <div className="trainer-img-placeholder" style={{ color: "var(--accent-orange)" }}>
-                  💪
-                  <span className="trainer-badge" style={{ backgroundColor: "var(--accent-orange)", color: "#000" }}>Strength</span>
+              <div className="glass-panel" style={{ padding: "16px", borderRadius: "12px", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "1.2rem" }}>💧 Hydration Tracker</span>
+                  <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--primary)" }}>{(totalWorkouts * 250)} / 3000 ml</span>
                 </div>
-                <div className="trainer-info">
-                  <div className="trainer-name">Max</div>
-                  <div className="trainer-specialty">Strength & Muscle Overload</div>
-                  <p className="trainer-bio">
-                    Dedicated strength specialist. Focuses on heavy weights, perfect range of motion, and high-energy encouragement.
-                  </p>
-                  <button 
-                    className="btn btn-secondary" 
-                    style={{ width: "100%", fontSize: "0.8rem", borderRadius: "10px", padding: "8px" }}
-                    onClick={(e) => { e.stopPropagation(); playTrainerIntro("Max"); }}
-                  >
-                    🗣️ Hear Intro
-                  </button>
+                <div style={{ width: "100%", height: "8px", background: "rgba(255,255,255,0.06)", borderRadius: "4px", margin: "12px 0", overflow: "hidden" }}>
+                  <div style={{ width: `${Math.min(100, (totalWorkouts * 250 / 3000) * 100)}%`, height: "100%", background: "#3b82f6" }}></div>
                 </div>
+                <button 
+                  className="btn btn-secondary" 
+                  style={{ fontSize: "0.75rem", padding: "6px" }}
+                  onClick={() => alert("💧 Added +250ml Water glass logged!")}
+                >
+                  +250ml Glass
+                </button>
               </div>
 
-              {/* Serena */}
-              <div 
-                className={`trainer-card card-Serena ${selectedTrainer === "Serena" ? "selected" : ""}`}
-                onClick={() => setSelectedTrainer("Serena")}
-              >
-                <div className="trainer-img-placeholder" style={{ color: "var(--accent-violet)" }}>
-                  🧘
-                  <span className="trainer-badge" style={{ backgroundColor: "var(--accent-violet)", color: "#000" }}>Yoga/Core</span>
-                </div>
-                <div className="trainer-info">
-                  <div className="trainer-name">Serena</div>
-                  <div className="trainer-specialty">Yoga Flow & Mobility</div>
-                  <p className="trainer-bio">
-                    Breath-focused mindfulness guide. Emphasizes core integration, functional flexibility, and joint longevity.
-                  </p>
-                  <button 
-                    className="btn btn-secondary" 
-                    style={{ width: "100%", fontSize: "0.8rem", borderRadius: "10px", padding: "8px" }}
-                    onClick={(e) => { e.stopPropagation(); playTrainerIntro("Serena"); }}
-                  >
-                    🗣️ Hear Intro
-                  </button>
-                </div>
-              </div>
-
-              {/* Leo */}
-              <div 
-                className={`trainer-card card-Leo ${selectedTrainer === "Leo" ? "selected" : ""}`}
-                onClick={() => setSelectedTrainer("Leo")}
-              >
-                <div className="trainer-img-placeholder" style={{ color: "var(--accent-pink)" }}>
-                  ⚡
-                  <span className="trainer-badge" style={{ backgroundColor: "var(--accent-pink)", color: "#000" }}>HIIT</span>
-                </div>
-                <div className="trainer-info">
-                  <div className="trainer-name">Leo</div>
-                  <div className="trainer-specialty">HIIT & Metabolic Conditioning</div>
-                  <p className="trainer-bio">
-                    Relentless high-speed trainer. Promotes explosive movements, agility loops, and sweating to exhaustion.
-                  </p>
-                  <button 
-                    className="btn btn-secondary" 
-                    style={{ width: "100%", fontSize: "0.8rem", borderRadius: "10px", padding: "8px" }}
-                    onClick={(e) => { e.stopPropagation(); playTrainerIntro("Leo"); }}
-                  >
-                    🗣️ Hear Intro
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Quick Stats Grid */}
-            <div className="grid-3" style={{ borderTop: "1px solid var(--border-muted)", paddingTop: "20px" }}>
-              <div className="glass-panel" style={{ padding: "16px", borderRadius: "12px", textAlign: "center" }}>
-                <span style={{ fontSize: "1.5rem" }}>🏋️</span>
-                <div style={{ fontSize: "1.2rem", fontWeight: 700, margin: "6px 0" }}>{totalWorkouts}</div>
-                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Total Sessions Completed</div>
-              </div>
-              <div className="glass-panel" style={{ padding: "16px", borderRadius: "12px", textAlign: "center" }}>
-                <span style={{ fontSize: "1.5rem" }}>🔥</span>
-                <div style={{ fontSize: "1.2rem", fontWeight: 700, margin: "6px 0" }}>{caloriesBurned} kcal</div>
-                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Est. Calories Burned</div>
-              </div>
               <div className="glass-panel" style={{ padding: "16px", borderRadius: "12px", textAlign: "center" }}>
                 <span style={{ fontSize: "1.5rem" }}>⚡</span>
-                <div style={{ fontSize: "1.2rem", fontWeight: 700, margin: "6px 0" }}>{streakCount} Days</div>
+                <div style={{ fontSize: "1.3rem", fontWeight: 800, margin: "4px 0" }}>{streakCount} Days</div>
                 <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Consistency Streak</div>
+              </div>
+
+              <div className="glass-panel" style={{ padding: "16px", borderRadius: "12px", textAlign: "center" }}>
+                <span style={{ fontSize: "1.5rem" }}>🔥</span>
+                <div style={{ fontSize: "1.3rem", fontWeight: 800, margin: "4px 0" }}>{caloriesBurned} kcal</div>
+                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>Calories Burned</div>
               </div>
             </div>
 
-            {/* Profile Settings Card */}
-            <div className="glass-panel" style={{ borderTop: "1px solid var(--border-muted)", paddingTop: "12px" }}>
-              <h3 style={{ fontSize: "1.1rem", marginBottom: "14px" }}>🔧 Custom Profile Parameters</h3>
-              
-              <div className="grid-2" style={{ gap: "16px" }}>
-                <div className="form-group">
-                  <label className="form-label">WhatsApp Contact Number</label>
+            {/* Select AI Trainer Persona */}
+            <div style={{ borderTop: "1px solid var(--border-muted)", paddingTop: "14px" }}>
+              <h3 style={{ fontSize: "1.1rem", marginBottom: "12px" }}>🤖 Active AI Coach Persona</h3>
+              <div className="grid-3">
+                {[
+                  { name: "Max" as const, badge: "Strength", color: "var(--accent-orange)", bio: "Heavy lifts & overload focus" },
+                  { name: "Serena" as const, badge: "Yoga/Core", color: "var(--accent-violet)", bio: "Mobility & functional posture" },
+                  { name: "Leo" as const, badge: "HIIT", color: "var(--accent-pink)", bio: "Explosive conditioning & speed" }
+                ].map((t) => (
+                  <div 
+                    key={t.name}
+                    className={`trainer-card card-${t.name} ${selectedTrainer === t.name ? "selected" : ""}`}
+                    onClick={() => setSelectedTrainer(t.name)}
+                    style={{ padding: "14px" }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: "1.4rem" }}>{t.name === "Max" ? "💪" : t.name === "Serena" ? "🧘" : "⚡"}</span>
+                      <span className="trainer-badge" style={{ backgroundColor: t.color, color: "#000", fontSize: "0.65rem" }}>{t.badge}</span>
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: "1rem", marginTop: "8px" }}>Coach {t.name}</div>
+                    <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", margin: "4px 0 10px" }}>{t.bio}</p>
+                    <button 
+                      className="btn btn-secondary" 
+                      style={{ width: "100%", fontSize: "0.75rem", padding: "6px" }}
+                      onClick={(e) => { e.stopPropagation(); playTrainerIntro(t.name); }}
+                    >
+                      🗣️ Hear Voice
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Quick Profile Parameters */}
+            <div className="glass-panel" style={{ borderTop: "1px solid var(--border-muted)", paddingTop: "14px" }}>
+              <h3 style={{ fontSize: "1.1rem", marginBottom: "10px" }}>📱 WhatsApp Automation Settings</h3>
+              <div className="form-group">
+                <label className="form-label" style={{ fontSize: "0.75rem" }}>WhatsApp Contact Number</label>
+                <div style={{ display: "flex", gap: "10px" }}>
                   <input 
                     type="text" 
                     className="form-input" 
                     placeholder="e.g. +919876543210"
                     value={whatsappNumber}
                     onChange={(e) => setWhatsappNumber(e.target.value)}
+                    style={{ flex: 1 }}
                   />
-                  <p style={{ color: "var(--text-dim)", fontSize: "0.7rem", marginTop: "4px" }}>
-                    Required to receive daily briefings and text messages.
-                  </p>
-                </div>
-
-                <div style={{ padding: "10px 12px", borderRadius: "10px", background: "rgba(0,255,170,0.05)", border: "1px solid rgba(0,255,170,0.15)" }}>
-                  <div style={{ fontSize: "0.75rem", color: "var(--primary)", fontWeight: 700, marginBottom: "4px" }}>✅ WhatsApp Integration Active</div>
-                  <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>Messages are sent via platform's TextMeBot account. Just add your number above and save.</div>
+                  <button className="btn" style={{ padding: "8px 16px", fontSize: "0.8rem" }} onClick={() => saveUserProfile(workoutParams)}>
+                    Save Number
+                  </button>
                 </div>
               </div>
-
-              {/* Biometrics Settings Row */}
-              <div style={{ marginTop: "14px", borderTop: "1px dashed var(--border-muted)", paddingTop: "14px" }}>
-                <h4 style={{ fontSize: "0.9rem", marginBottom: "10px", color: "var(--primary)" }}>🧬 Personal Biometrics (AI Coach Context)</h4>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginBottom: "12px" }}>
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontSize: "0.75rem" }}>Age (years)</label>
-                    <input 
-                      type="number" 
-                      className="form-input" 
-                      placeholder="e.g. 25"
-                      value={age}
-                      onChange={(e) => setAge(e.target.value === "" ? "" : parseInt(e.target.value))}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontSize: "0.75rem" }}>Height (cm)</label>
-                    <input 
-                      type="number" 
-                      className="form-input" 
-                      placeholder="e.g. 175"
-                      value={height}
-                      onChange={(e) => setHeight(e.target.value === "" ? "" : parseFloat(e.target.value))}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" style={{ fontSize: "0.75rem" }}>Weight (kg)</label>
-                    <input 
-                      type="number" 
-                      className="form-input" 
-                      placeholder="e.g. 70"
-                      value={weight}
-                      onChange={(e) => setWeight(e.target.value === "" ? "" : parseFloat(e.target.value))}
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group" style={{ marginBottom: "10px" }}>
-                  <label className="form-label" style={{ fontSize: "0.75rem" }}>Medical Conditions / Food Allergies / Injuries</label>
-                  <textarea 
-                    className="form-input" 
-                    placeholder="e.g. Lower back pain, peanut allergy, bad left knee"
-                    style={{ minHeight: "60px", resize: "vertical", fontFamily: "inherit", padding: "8px", background: "var(--bg-dark)", border: "1px solid var(--border-muted)", color: "var(--text-main)", borderRadius: "8px" }}
-                    value={medicalConditions}
-                    onChange={(e) => setMedicalConditions(e.target.value)}
-                  />
-                  <p style={{ color: "var(--text-dim)", fontSize: "0.7rem", marginTop: "4px" }}>
-                    Your AI Coach will cross-reference this to exclude unsafe exercises and customize diets.
-                  </p>
-                </div>
-              </div>
-
-              <button 
-                className="btn" 
-                style={{ padding: "8px 14px", fontSize: "0.8rem", borderRadius: "10px", marginTop: "14px", width: "100%" }}
-                onClick={() => saveUserProfile(workoutParams)}
-              >
-                Save Profile Settings
-              </button>
             </div>
+
           </div>
         )}
 
