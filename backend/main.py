@@ -16,6 +16,9 @@ supabase_url = os.getenv("SUPABASE_URL")
 supabase_key = os.getenv("SUPABASE_ANON_KEY")
 supabase: Optional[Client] = None
 
+# Platform-level TextMeBot key (user only provides their number)
+PLATFORM_TEXTMEBOT_KEY = os.getenv("TEXTMEBOT_API_KEY", "")
+
 if supabase_url and supabase_key and "your_supabase" not in supabase_url:
     try:
         supabase = create_client(supabase_url, supabase_key)
@@ -591,11 +594,12 @@ async def send_whatsapp_brief(req: WhatsAppBriefRequest):
         if twilio_res.get("status") == "success":
             return {"status": "success", "provider": "twilio", "response": twilio_res}
             
-        # CallMeBot / TextMeBot fallback if configured
-        key = prof.get("callmebot_key")
+        # TextMeBot fallback - use user's own key OR platform key from env
+        user_key = prof.get("callmebot_key") or ""
+        key = user_key if user_key else (f"textmebot:{PLATFORM_TEXTMEBOT_KEY}" if PLATFORM_TEXTMEBOT_KEY else "")
+        
         if key:
             encoded_msg = urllib.parse.quote_plus(msg)
-            # Phone number must be URL-encoded (handles + in +91...)
             encoded_phone = urllib.parse.quote_plus(str(phone).strip())
             
             if key.startswith("textmebot:"):
@@ -604,18 +608,19 @@ async def send_whatsapp_brief(req: WhatsAppBriefRequest):
             else:
                 bot_url = f"https://api.callmebot.com/whatsapp.php?phone={encoded_phone}&text={encoded_msg}&apikey={key}"
             
-            print(f"[TextMeBot] Dispatching to {phone} via URL: {bot_url[:80]}...")
+            source = "user_key" if user_key else "platform_key"
+            print(f"[TextMeBot] Dispatching to {phone} ({source}) via URL: {bot_url[:80]}...")
             req_bot = urllib.request.Request(bot_url, headers={"User-Agent": "Mozilla/5.0"})
             try:
                 with urllib.request.urlopen(req_bot, timeout=15) as bot_resp:
                     resp_data = bot_resp.read().decode('utf-8')
                 print(f"[TextMeBot] Response: {resp_data[:200]}")
-                return {"status": "success", "provider": "bot_fallback", "response": resp_data}
+                return {"status": "success", "provider": f"textmebot_{source}", "response": resp_data}
             except Exception as bot_err:
                 print(f"[TextMeBot] Error: {bot_err}")
                 return {"status": "error", "message": f"TextMeBot failed: {str(bot_err)}"}
             
-        return {"status": "warning", "provider": "mocked", "message": "No Twilio or TextMeBot configured. Check profile settings.", "response": twilio_res}
+        return {"status": "warning", "provider": "mocked", "message": "No WhatsApp provider configured. Add TEXTMEBOT_API_KEY to server env.", "response": twilio_res}
     except Exception as e:
         print(f"Error dispatching WhatsApp brief: {e}")
         return {"status": "error", "message": str(e)}

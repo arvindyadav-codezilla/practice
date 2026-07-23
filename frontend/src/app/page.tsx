@@ -151,11 +151,9 @@ export default function FlexAIPortal() {
     if (hostname === "localhost" || hostname === "127.0.0.1" || hostname.startsWith("192.168.") || hostname.startsWith("10.") || hostname.startsWith("172.")) {
       return `http://${hostname}:8000${path}`;
     }
-    const envUrl = process.env.NEXT_PUBLIC_WS_SERVER_URL;
-    if (envUrl) {
-      const httpUrl = envUrl.replace("wss://", "https://").replace("ws://", "http://").replace("/ws", "");
-      return `${httpUrl}${path}`;
-    }
+    // Use explicit API URL env var (HTTP, not WebSocket)
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (apiUrl) return `${apiUrl}${path}`;
     return `https://synapse-chat-backend.onrender.com${path}`;
   };
 
@@ -303,7 +301,6 @@ export default function FlexAIPortal() {
           duration: updatedParams.duration,
           equipment: updatedParams.equipment,
           whatsappNumber: whatsappNumber,
-          callmebotKey: callmebotKey,
           role: role,
           gymOwnerId: gymOwnerId,
           twilioAccountSid: twilioAccountSid,
@@ -2644,19 +2641,9 @@ export default function FlexAIPortal() {
                   </p>
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label">TextMeBot / CallMeBot API Key</label>
-                  <input 
-                    type="text" 
-                    className="form-input" 
-                    placeholder="textmebot:YOUR_API_KEY"
-                    value={callmebotKey}
-                    onChange={(e) => setCallmebotKey(e.target.value)}
-                  />
-                  <p style={{ color: "var(--text-dim)", fontSize: "0.7rem", marginTop: "4px" }}>
-                    For TextMeBot enter: <code style={{color:"var(--primary)"}}>textmebot:APIKEY</code><br/>
-                    For CallMeBot enter just the numeric key.
-                  </p>
+                <div style={{ padding: "10px 12px", borderRadius: "10px", background: "rgba(0,255,170,0.05)", border: "1px solid rgba(0,255,170,0.15)" }}>
+                  <div style={{ fontSize: "0.75rem", color: "var(--primary)", fontWeight: 700, marginBottom: "4px" }}>✅ WhatsApp Integration Active</div>
+                  <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>Messages are sent via platform's TextMeBot account. Just add your number above and save.</div>
                 </div>
               </div>
 
