@@ -595,18 +595,27 @@ async def send_whatsapp_brief(req: WhatsAppBriefRequest):
         key = prof.get("callmebot_key")
         if key:
             encoded_msg = urllib.parse.quote_plus(msg)
+            # Phone number must be URL-encoded (handles + in +91...)
+            encoded_phone = urllib.parse.quote_plus(str(phone).strip())
+            
             if key.startswith("textmebot:"):
                 real_key = key.replace("textmebot:", "").strip()
-                url = f"https://api.textmebot.com/send.php?recipient={phone}&apikey={real_key}&text={encoded_msg}"
+                bot_url = f"https://api.textmebot.com/send.php?recipient={encoded_phone}&apikey={real_key}&text={encoded_msg}"
             else:
-                url = f"https://api.callmebot.com/whatsapp.php?phone={phone}&text={encoded_msg}&apikey={key}"
-                
-            req_bot = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req_bot, timeout=10) as response:
-                resp_data = response.read().decode('utf-8')
-            return {"status": "success", "provider": "bot_fallback", "response": resp_data}
+                bot_url = f"https://api.callmebot.com/whatsapp.php?phone={encoded_phone}&text={encoded_msg}&apikey={key}"
             
-        return {"status": "success", "provider": "mocked", "response": twilio_res}
+            print(f"[TextMeBot] Dispatching to {phone} via URL: {bot_url[:80]}...")
+            req_bot = urllib.request.Request(bot_url, headers={"User-Agent": "Mozilla/5.0"})
+            try:
+                with urllib.request.urlopen(req_bot, timeout=15) as bot_resp:
+                    resp_data = bot_resp.read().decode('utf-8')
+                print(f"[TextMeBot] Response: {resp_data[:200]}")
+                return {"status": "success", "provider": "bot_fallback", "response": resp_data}
+            except Exception as bot_err:
+                print(f"[TextMeBot] Error: {bot_err}")
+                return {"status": "error", "message": f"TextMeBot failed: {str(bot_err)}"}
+            
+        return {"status": "warning", "provider": "mocked", "message": "No Twilio or TextMeBot configured. Check profile settings.", "response": twilio_res}
     except Exception as e:
         print(f"Error dispatching WhatsApp brief: {e}")
         return {"status": "error", "message": str(e)}
