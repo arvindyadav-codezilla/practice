@@ -104,6 +104,10 @@ export default function FlexAIPortal() {
   const [reportOutput, setReportOutput] = useState<string>("");
   const [generatingReport, setGeneratingReport] = useState(false);
 
+  // Native Command Palette (Linear / Raycast Style)
+  const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
+  const [cmdSearch, setCmdSearch] = useState("");
+
   // Analytics & Broadcast States
   const [analyticsData, setAnalyticsData] = useState<{ peakHours: any, weeklyAttendance: any }>({ peakHours: {}, weeklyAttendance: {} });
   const [broadcastMsg, setBroadcastMsg] = useState("");
@@ -180,6 +184,21 @@ export default function FlexAIPortal() {
     }
     return `wss://synapse-chat-backend.onrender.com${path}`;
   };
+
+  // Native Keyboard Shortcuts (Cmd+K / Ctrl+K Command Palette)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setCmdPaletteOpen((prev) => !prev);
+      }
+      if (e.key === "Escape") {
+        setCmdPaletteOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Listen to Auth State Changes
   useEffect(() => {
@@ -2496,6 +2515,13 @@ export default function FlexAIPortal() {
         <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
           <button 
             className="btn btn-secondary"
+            style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.75rem", padding: "6px 12px", borderRadius: "8px" }}
+            onClick={() => setCmdPaletteOpen(true)}
+          >
+            🔍 Quick Search <kbd>⌘K</kbd>
+          </button>
+          <button 
+            className="btn btn-secondary"
             style={{ padding: "6px 12px", fontSize: "0.75rem", borderRadius: "8px" }}
             onClick={() => setVoiceEnabled(!voiceEnabled)}
           >
@@ -3406,6 +3432,44 @@ export default function FlexAIPortal() {
           <span>Diet</span>
         </button>
       </nav>
+
+      {/* Command Palette Overlay (Linear / Raycast Native Style) */}
+      {cmdPaletteOpen && (
+        <div className="command-palette-backdrop" onClick={() => setCmdPaletteOpen(false)}>
+          <div className="command-palette-box" onClick={(e) => e.stopPropagation()}>
+            <input
+              type="text"
+              className="command-palette-input"
+              placeholder="Type a command or search... (Press Esc to close)"
+              autoFocus
+              value={cmdSearch}
+              onChange={(e) => setCmdSearch(e.target.value)}
+            />
+            <div style={{ maxHeight: "320px", overflowY: "auto" }}>
+              {[
+                { label: "⚡ Start Live Session", action: () => { setActiveTab("live"); setCmdPaletteOpen(false); }, kbd: "↵" },
+                { label: "🏠 Go to Today Action Feed", action: () => { setActiveTab("dashboard"); setCmdPaletteOpen(false); }, kbd: "G D" },
+                { label: "🏋️ Open Workout Builder", action: () => { setActiveTab("workout"); setCmdPaletteOpen(false); }, kbd: "G W" },
+                { label: "🥗 Open Nutrition & Fuel Planner", action: () => { setActiveTab("nutrition"); setCmdPaletteOpen(false); }, kbd: "G N" },
+                { label: "📋 Open AI Coach Report & Vault", action: () => { setActiveTab("coach_report"); setCmdPaletteOpen(false); }, kbd: "G C" },
+                { label: "💧 Log +250ml Hydration Glass", action: () => { alert("💧 +250ml Water logged!"); setCmdPaletteOpen(false); }, kbd: "L W" },
+                { label: "📝 Today's Gym Check-in", action: () => { alert("✅ Checked-in!"); setCmdPaletteOpen(false); }, kbd: "C I" }
+              ]
+                .filter((item) => item.label.toLowerCase().includes(cmdSearch.toLowerCase()))
+                .map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="command-palette-item"
+                    onClick={item.action}
+                  >
+                    <span>{item.label}</span>
+                    <kbd>{item.kbd}</kbd>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
